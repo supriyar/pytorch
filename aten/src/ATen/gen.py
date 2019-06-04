@@ -202,8 +202,7 @@ top_env = {
     'cpu_type_headers': [],
     'cuda_type_registrations': [],
     'cuda_type_headers': [],
-    'pure_virtual_type_method_declarations': [],
-    'pure_virtual_extended_type_method_declarations': [],
+    'function_registrations': [],
     'type_method_declarations': [],
     'type_method_definitions': [],
     'tensor_method_declarations': [],
@@ -323,10 +322,11 @@ def generate_storage_type_and_tensor(backend, density, declarations):
         env['Generator'] = 'CPUGenerator'
         env['allocator'] = 'getCPUAllocator()'
 
-    declarations, definitions, th_declarations, th_definitions = function_wrapper.create_derived(
+    declarations, definitions, registrations, th_declarations, th_definitions = function_wrapper.create_derived(
         env, declarations)
     env['type_derived_method_declarations'] = declarations
     env['type_derived_method_definitions'] = definitions
+    env['function_registrations'] = registrations
     env['legacy_th_declarations'] = th_declarations
     env['legacy_th_definitions'] = th_definitions
 
@@ -366,10 +366,11 @@ def generate_type_extension_backend(backend, declarations):
     env['TypeID'] = 'TypeID::' + backend
     top_env['type_ids'].append(backend + ',')
 
-    declarations, definitions = function_wrapper.create_extension_backend(
+    declarations, definitions, registrations = function_wrapper.create_extension_backend(
         env, declarations)
     env['type_method_declarations'] = declarations
     env['type_method_definitions'] = definitions
+    env['function_registrations'] = registrations
 
     type_register = TYPE_REGISTER.substitute(backend=env['Backend'], type_name=env['Type'])
     top_env['cpu_type_headers'].append('#include "ATen/{}.h"'.format(env['Type']))
