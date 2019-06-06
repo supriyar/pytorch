@@ -17,14 +17,23 @@ target_include_directories(lite_executor
     )
 caffe2_interface_library(lite_executor lite_executor_interface)
 
-add_executable(executor executor.cpp)
-target_link_libraries(executor lite_executor_interface torch)
+add_executable(executor predictor.cpp)
+target_link_libraries(executor
+    lite_executor_interface
+    -Wl,--gc-sections -Wl,--print-gc-sections
+    -Wl,--whole-archive
+    caffe2
+    -Wl,--no-whole-archive
+)
 set_property(TARGET executor PROPERTY CXX_STANDARD 11)
 
-add_executable(loader loader.cpp)
-target_link_libraries(loader torch caffe2_library)
-target_include_directories(loader
-    PUBLIC
-    ${PROJECT_BINARY_DIR}/aten/src/)
-set_property(TARGET loader PROPERTY CXX_STANDARD 11)
-
+add_library(mobile_torch SHARED predictor.cpp)
+target_link_libraries(mobile_torch
+    lite_executor_interface
+    -Wl,--gc-sections -Wl,--print-gc-sections
+    -Wl,--whole-archive
+    caffe2
+    -Wl,--no-whole-archive
+)
+set_property(TARGET mobile_torch PROPERTY CXX_STANDARD 11)
+install(TARGETS mobile_torch DESTINATION "${TORCH_INSTALL_LIB_DIR}")

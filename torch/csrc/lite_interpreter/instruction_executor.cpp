@@ -1,5 +1,5 @@
 #include <torch/csrc/lite_interpreter/instruction_executor.h>
-#include <aten/core/dispatch/Dispatcher.h>
+#include <aten/src/ATen/core/dispatch/Dispatcher.h>
 
 namespace torch {
 namespace jit {

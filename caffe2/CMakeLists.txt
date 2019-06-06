@@ -1356,3 +1356,4 @@ endif()
 
 # Finally, set the Caffe2_MAIN_LIBS variable in the parent scope.
 set(Caffe2_MAIN_LIBS ${Caffe2_MAIN_LIBS} PARENT_SCOPE)
+set(TORCH_INSTALL_LIB_DIR ${TORCH_INSTALL_LIB_DIR} PARENT_SCOPE)
