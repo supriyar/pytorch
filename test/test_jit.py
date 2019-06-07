@@ -6145,7 +6145,7 @@ a")
                         prec = (1e-4)
                     self.assertEqual(res_python, res_script, message=msg, prec=prec)
 
-        unimplemented = ["fsum", "isclose", "trunc", "hypot", "log2"]
+        unimplemented = ["fsum", "isclose", "trunc"]
         ops = [x for x in dir(math) if callable(getattr(math, x))]
         for op in ops:
             if op in unimplemented:
