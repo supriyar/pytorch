@@ -42,7 +42,11 @@ void RegisterOperators::checkSchemaAndRegisterOp_(const std::string& schemaOrNam
   #if defined(CAFFE2_IS_XPLAT_BUILD)
     throw std::logic_error("Tried to register operator " + schemaOrNameStr + ". We don't support registering c10 ops on mobile yet because the function schema parser isn't present in the mobile build.");
   #else
-    either<OperatorName, FunctionSchema> schemaOrName = torch::jit::parseSchemaOrName(schemaOrNameStr);
+//    either<OperatorName, FunctionSchema> schemaOrName = torch::jit::parseSchemaOrName(schemaOrNameStr);
+    OperatorName opname;
+    opname.name = schemaOrNameStr;
+    either<OperatorName, FunctionSchema> schemaOrName = make_left<OperatorName, FunctionSchema>(opname);
+
     if (schemaOrName.is_right()) {
       // schema was explicitly specified. Check it matches the inferred one and register the op.
       checkSchemaAndRegisterOp_(std::move(schemaOrName).right(), std::move(options));
