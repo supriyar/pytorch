@@ -50,6 +50,8 @@ IValue InstructionExecutor::run(Stack& stack) {
       if (i > 0)
         std::cout << ", ";
       std::cout << inst.inputs[i].unique_id;
+      if(inst.inputs[i].free_flag)
+        std::cout << "!";
     }
     std::cout << ") -> ";
     for (int i = 0; i < inst.outputs.size(); ++i) {
@@ -72,7 +74,7 @@ IValue InstructionExecutor::run(Stack& stack) {
     // registration route.
     if (inst.name == "prim::Load___") {
       for (const auto& attr : inst.attributes) {
-        stack.push_back(attr);
+        torch::jit::push(stack, attr);
       }
     }
     else if (inst.name == "prim::Constant___") {
@@ -80,7 +82,13 @@ IValue InstructionExecutor::run(Stack& stack) {
         stack.emplace_back();
       }
       else {
-        stack.push_back(inst.attributes[0]);
+        auto val = inst.attributes[0];
+        if (val.isIntList() || val.isBoolList() || val.isDoubleList()) {
+          auto v = val.toIntList()->elements();
+          torch::jit::push(stack, v);
+        } else {
+          torch::jit::push(stack, inst.attributes[0]);
+        }
       }
     }
     else if (inst.name == "prim::Drop___") {

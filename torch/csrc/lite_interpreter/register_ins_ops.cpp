@@ -57,6 +57,15 @@ static auto registry0 = torch::RegisterOperators().op(
                           transposed, output_padding, groups, benchmark, deterministic, cudnn_enabled);
   })
 ).op(
+  "aten::conv2d_Tensor_Tensor_Tensor?_int[]_int[]_int[]_int__Tensor",
+  torch::RegisterOperators::options().kernel(at::CPUTensorId(),
+  [](at::Tensor input, at::Tensor weight, c10::optional<at::Tensor> bias,
+    std::vector<int64_t> stride, std::vector<int64_t> padding,
+    std::vector<int64_t> dilation, bool transposed, std::vector<int64_t> output_padding,
+    int64_t groups) {
+  return at::conv2d(input, weight, optional_to_tensor(bias), stride, padding, dilation,groups);
+  })
+).op(
   "aten::batch_norm_Tensor_Tensor?_Tensor?_Tensor?_Tensor?_bool_float_float_bool__Tensor",
   torch::RegisterOperators::options().kernel(at::CPUTensorId(),
   [] (at::Tensor input, c10::optional<at::Tensor> weight, c10::optional<at::Tensor> bias,
