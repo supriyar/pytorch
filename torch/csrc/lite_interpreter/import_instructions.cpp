@@ -307,9 +307,6 @@ void InstructionsDeserializer::loadInstructions(const JsonValue& instructionsVal
               }
               ins.attributes.emplace_back(dv);
             }
-            else if (key == "kind" && j->value.toString() == "n") {
-              ins.attributes.emplace_back(c10::IValue());
-            }
             else if (key == "tensorId") {
               size_t id = std::stoi(j->value.toString());
               ins.attributes.emplace_back(tensors[id]);
