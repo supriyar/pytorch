@@ -226,7 +226,7 @@ at::Tensor InstructionsDeserializer::loadTensor(
   }
   AT_ASSERT(result.defined());
 
-  result = autograd::make_variable(result, requires_grad);
+  //result = autograd::make_variable(result, requires_grad);
 
   return result;
 }
