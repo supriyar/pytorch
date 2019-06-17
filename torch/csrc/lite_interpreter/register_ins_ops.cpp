@@ -61,9 +61,8 @@ static auto registry0 = torch::RegisterOperators().op(
   torch::RegisterOperators::options().kernel(at::CPUTensorId(),
   [](at::Tensor input, at::Tensor weight, c10::optional<at::Tensor> bias,
     std::vector<int64_t> stride, std::vector<int64_t> padding,
-    std::vector<int64_t> dilation, bool transposed, std::vector<int64_t> output_padding,
-    int64_t groups) {
-  return at::conv2d(input, weight, optional_to_tensor(bias), stride, padding, dilation,groups);
+    std::vector<int64_t> dilation, int64_t groups) {
+  return at::conv2d(input, weight, optional_to_tensor(bias), stride, padding, dilation, groups);
   })
 ).op(
   "aten::batch_norm_Tensor_Tensor?_Tensor?_Tensor?_Tensor?_bool_float_float_bool__Tensor",
@@ -116,6 +115,23 @@ static auto registry0 = torch::RegisterOperators().op(
   [](at::Tensor a, std::vector<int64_t> list) ->at::Tensor {
     return a.view(list);
   })
+).op(
+  "aten::dim_Tensor__int",
+  torch::RegisterOperators::options().kernel(at::CPUTensorId(),
+  [](at::Tensor a) ->int64_t {
+  return a.dim();
+  })
+).op(
+  "aten::eq_int_int__bool",
+  torch::RegisterOperators::options().catchAllKernel(
+  [](int64_t a, int64_t b) ->bool {
+  return a == b;
+  })
+).op(
+  "aten::log_softmax_Tensor_int__Tensor",
+  torch::RegisterOperators::options().kernel(at::CPUTensorId(),
+  [](at::Tensor a, int64_t b) ->at::Tensor {
+  return at::log_softmax(a, b);                                                                        })
 ).op(
   "prim::Load___",
   torch::RegisterOperators::options().catchAllKernel([]() {
