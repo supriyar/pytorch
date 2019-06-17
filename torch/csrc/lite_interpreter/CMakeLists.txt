@@ -20,7 +20,7 @@ caffe2_interface_library(lite_executor lite_executor_interface)
 add_executable(executor predictor.cpp)
 target_link_libraries(executor
     lite_executor_interface
-    -Wl,--gc-sections -Wl,--print-gc-sections
+    -Wl,--gc-sections # -Wl,--print-gc-sections
     -Wl,--whole-archive
     caffe2
     -Wl,--no-whole-archive
@@ -30,10 +30,20 @@ set_property(TARGET executor PROPERTY CXX_STANDARD 11)
 add_library(mobile_torch SHARED predictor.cpp)
 target_link_libraries(mobile_torch
     lite_executor_interface
-    -Wl,--gc-sections -Wl,--print-gc-sections
+    -Wl,--gc-sections # -Wl,--print-gc-sections
     -Wl,--whole-archive
     caffe2
     -Wl,--no-whole-archive
 )
 set_property(TARGET mobile_torch PROPERTY CXX_STANDARD 11)
 install(TARGETS mobile_torch DESTINATION "${TORCH_INSTALL_LIB_DIR}")
+
+add_executable(qnnpack_test qnnpack_test.cpp)
+target_link_libraries(qnnpack_test
+    lite_executor_interface
+    -Wl,--gc-sections
+    -Wl,--whole-archive
+    caffe2
+    -Wl,--no-whole-archive
+)
+set_property(TARGET qnnpack_test PROPERTY CXX_STANDARD 11)
