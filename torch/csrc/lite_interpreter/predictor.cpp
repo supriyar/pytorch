@@ -43,8 +43,8 @@ int main(int argc, const char* argv[]) {
   std::ifstream input(argv[1]);
   load_model(input);
   std::cout << (is_model_loaded() ? "OK" : "Failed") << std::endl;
-  allocate_input_buffer(3, 224, 224);
-  for (int i = 0; i < 3 * 224 * 224; i++)
+  allocate_input_buffer(1, 28, 28);
+  for (int i = 0; i < 1 * 28 * 28; i++)
     input_buffer()[i] = 1.;
   run_model();
   for (int i = 0; i < 5; i++)

@@ -131,7 +131,20 @@ static auto registry0 = torch::RegisterOperators().op(
   "aten::log_softmax_Tensor_int__Tensor",
   torch::RegisterOperators::options().kernel(at::CPUTensorId(),
   [](at::Tensor a, int64_t b) ->at::Tensor {
-  return at::log_softmax(a, b);                                                                        })
+  return at::log_softmax(a, b);
+  })
+).op(
+  "aten::quantize_linear_2",
+  torch::RegisterOperators::options().kernel(at::CPUTensorId(),
+  [](at::Tensor a, double scale, int64_t zero_point) ->at::Tensor {
+  return at::quantize_linear(a, scale, zero_point, c10::ScalarType::QUInt8);
+  })
+).op(
+  "aten::dequantize",
+  torch::RegisterOperators::options().kernel(at::QuantizedCPUTensorId(),
+  [](at::Tensor a) ->at::Tensor {
+  return a.dequantize();
+  })
 ).op(
   "prim::Load___",
   torch::RegisterOperators::options().catchAllKernel([]() {
