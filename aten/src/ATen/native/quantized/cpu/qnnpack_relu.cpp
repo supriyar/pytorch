@@ -65,7 +65,8 @@ class QNNPACKRelu final : public c10::OperatorKernel {
 };
 
 static auto registry = c10::RegisterOperators().op(
-    "quantized::qnnpack_relu(Tensor input) -> Tensor",
+    "quantized::qnnpack_relu",
+    //"quantized::qnnpack_relu(Tensor input) -> Tensor",
     c10::RegisterOperators::options()
       .kernel<QNNPACKRelu>(QuantizedCPUTensorId()));
 }  // namespace
