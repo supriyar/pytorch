@@ -1,5 +1,6 @@
 #include <torch/csrc/lite_interpreter/instruction_executor.h>
 #include <aten/src/ATen/core/dispatch/Dispatcher.h>
+#include <sstream>
 
 namespace torch {
 namespace jit {
@@ -136,6 +137,11 @@ IValue InstructionExecutor::run(Stack& stack) {
     for (int i = inst.outputs.size() - 1; i >= 0; --i) {
       int reg = inst.outputs[i].unique_id;
       registers[reg] = pop(stack);
+      if (reg == 0 || reg == 1 || reg == 2 || reg == 3) {
+        std::ostringstream out;
+        out << registers[reg];
+        std::cout << " Register " << reg << " " << out.str().substr(0, 80) << std::endl;
+      }
 //      std::cout << "pop reg[" << reg << "];\n" << registers[reg] << "\n";
     }
     ++pc;
