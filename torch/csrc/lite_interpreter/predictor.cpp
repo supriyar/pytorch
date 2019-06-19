@@ -3,7 +3,7 @@
 #include <torch/csrc/lite_interpreter/instruction_executor.h>
 #include <torch/csrc/jit/ir.h>
 #include <torch/script.h> // One-stop header.
-
+#include <fstream>
 #include "predictor.h"
 
 static at::Tensor input;
@@ -45,10 +45,23 @@ int main(int argc, const char* argv[]) {
   load_model(input);
   std::cout << (is_model_loaded() ? "OK" : "Failed") << std::endl;
   allocate_input_buffer(1, 28, 28);
-  for (int i = 0; i < 1 * 28 * 28; i++)
-    input_buffer()[i] = 1.;
+
+  std::ifstream File;
+  File.open("/home/supriyar/pytorch/torch/csrc/lite_interpreter/mnist_in0.txt");
+  std::cout << " Loading input " << std::endl;
+  for(int i = 0; i < 28*28; ++i)
+  {
+      float x;
+      File >> x;
+      input_buffer()[i] = x;
+      //std::cout << " " << input_buffer()[i];
+  }
+
+  File.close();
+  //for (int i = 0; i < 1 * 28 * 28; i++)
+  //  input_buffer()[i] = 1.;
   run_model();
-  for (int i = 0; i < 5; i++)
+  for (int i = 0; i < 10; i++)
     std::cout << output_buffer()[i] << " ";
   std::cout << std::endl;
 }
