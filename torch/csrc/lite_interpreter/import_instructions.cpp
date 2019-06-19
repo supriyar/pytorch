@@ -176,7 +176,7 @@ at::Tensor InstructionsDeserializer::loadTensor(
     // override the device, if user provides map_location
     device = device_.value();
   }
-
+  std::cout << " Record key " << record_key << std::endl;
   auto storage_it = storageMap.find(record_key);
   if (storage_it == storageMap.end()) {
     at::DataPtr storage_ptr;
@@ -227,7 +227,7 @@ at::Tensor InstructionsDeserializer::loadTensor(
   AT_ASSERT(result.defined());
 
   //result = autograd::make_variable(result, requires_grad);
-
+  std::cout << " Returning tensor with offset " << offset << " dims " << dims << " strides " << strides<< std::endl;
   return result;
 }
 

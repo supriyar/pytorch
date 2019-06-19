@@ -1,6 +1,7 @@
 #include <torch/csrc/lite_interpreter/import_instructions.h>
 #include <torch/csrc/jit/generic_instruction.h>
 #include <torch/csrc/lite_interpreter/instruction_executor.h>
+#include <torch/csrc/jit/ir.h>
 #include <torch/script.h> // One-stop header.
 
 #include "predictor.h"

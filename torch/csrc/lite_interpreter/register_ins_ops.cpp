@@ -134,7 +134,7 @@ static auto registry0 = torch::RegisterOperators().op(
   return at::log_softmax(a, b);
   })
 ).op(
-  "aten::quantize_linear_2",
+  "aten::quantize_linear",
   torch::RegisterOperators::options().kernel(at::CPUTensorId(),
   [](at::Tensor a, double scale, int64_t zero_point) ->at::Tensor {
   return at::quantize_linear(a, scale, zero_point, c10::ScalarType::QUInt8);
