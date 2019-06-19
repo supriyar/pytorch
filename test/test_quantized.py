@@ -815,16 +815,7 @@ class TestQNNPackOps(TestCase):
         # Make sure the results match
         np.testing.assert_equal(result_q, Y_q.int_repr().numpy())
 
-    """Tests max pool operation on quantized tensors."""
-    """
-    @given(Q=qtensor(shapes=array_shapes(min_dims=4, max_dims=4,
-                                         min_side=1, max_side=4),
-                                         dtypes=((torch.quint8, np.uint8, 0),),),
-           kernel=st.sampled_from((2, 3)),
-           stride=st.integers(1, 2),
-           dilation=st.integers(1, 2),
-           padding=st.integers(0, 2))
-    """
+    """Tests qnnpack max pool operation on quantized tensors."""
     def test_qnnpack_max_pool2d(self):#, Q, kernel, stride, dilation, padding):
         import torch.nn.functional as F
 
@@ -842,19 +833,15 @@ class TestQNNPackOps(TestCase):
         dilation = 2
         padding = 1
 
-        #X, (scale, zero_point), (qmin, qmax), (torch_type, np_type) = Q
         # Check constraints
         assume(kernel // 2 >= padding)  # Kernel cannot be overhanging!
-        #assume(kernel <= min(X.shape[2], X.shape[3]))
+
         iH, iW = X.shape[-2:]
+
         oH = pool_output_shape(iH, kernel, padding, stride, dilation)
         assume(oH > 0)
-        #print(X.shape, scale, zero_point, kernel, stride, dilation, padding)
-        #print("Input ", X)
-        #print("expected oh ", oH )
         oW = pool_output_shape(iW, kernel, padding, stride, dilation)
         assume(oW > 0)
-        #print("expected ow ", oW )
 
         k = (kernel, kernel)
         s = (stride, stride)
@@ -863,30 +850,52 @@ class TestQNNPackOps(TestCase):
 
         q_max_pool = torch.ops.quantized.qnnpack_max_pool2d
 
-        #a = torch.from_numpy(X)
-        #print(a.type)
         a = scale * (X - zero_point).to(dtype=torch.float)
-        #print("Float input ", a)
         qa = torch.quantize_linear(a, scale=scale, zero_point=zero_point,
                                    dtype=torch_type)
+
         qa_nhwc = qa.permute([0, 2, 3, 1]).contiguous()
         a_ref = qa.dequantize()
-        #print("Input Permuted NHWC ", qa_nhwc.int_repr())
 
         a_pool = F.max_pool2d(a_ref, kernel_size=k, stride=s, padding=p,
                               dilation=d)
-        #print("ref output ", a_pool.shape)
-        #print("ref", a_pool)
 
         a_pool_nhwc = a_pool.permute([0, 2, 3, 1])
-        #print("permuted ref", a_pool_nhwc)
 
         qa_pool = q_max_pool(qa_nhwc, kernel_size=k, stride=s, dilation=d, padding=p)
 
-        #print("qnnpack output ", qa_pool.shape)
         qa_pool_int = qa_pool.dequantize()
-        #print(qa_pool_int)
         np.testing.assert_equal(a_pool_nhwc.numpy(), qa_pool_int.numpy())
+
+    """Tests the correctness of the qnnpack_add op."""
+    def test_qnnpack_add(self):
+        add = torch.ops.quantized.qnnpack_add
+
+        A = torch.arange(-25, 25, dtype=torch.float)
+        B = torch.arange(-25, 25, dtype=torch.float)
+
+        scale_A = 3.0
+        zero_point_A = 7
+        scale_B = 5.0
+        zero_point_B = 127
+
+        scale_C = 0.5
+        zero_point_C = 5
+
+        qA = torch.quantize_linear(A, scale=scale_A, zero_point=zero_point_A,
+                                   dtype=torch.quint8)
+        qB = torch.quantize_linear(B, scale=scale_B, zero_point=zero_point_B,
+                                   dtype=torch.quint8)
+
+        # Add ground truth
+        C = (qA.dequantize() + qB.dequantize()).numpy()
+
+        qC = _quantize(C, scale_C, zero_point_C)
+        qC_qnnp = add(qA, qB, scale_C, zero_point_C)
+
+        np.testing.assert_equal(qC, qC_qnnp.int_repr(),
+                                "Quantized addition failed.")
+
 
 if __name__ == "__main__":
     run_tests()
