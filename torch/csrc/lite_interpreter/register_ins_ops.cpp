@@ -140,6 +140,12 @@ static auto registry0 = torch::RegisterOperators().op(
   return at::quantize_linear(a, scale, zero_point, c10::ScalarType::QUInt8);
   })
 ).op(
+  "aten::quantize_linear_i32",
+  torch::RegisterOperators::options().kernel(at::CPUTensorId(),
+  [](at::Tensor a, double scale, int64_t zero_point) ->at::Tensor {
+  return at::quantize_linear(a, scale, zero_point, c10::ScalarType::QInt32);
+  })
+).op(
   "aten::dequantize",
   torch::RegisterOperators::options().kernel(at::QuantizedCPUTensorId(),
   [](at::Tensor a) ->at::Tensor {

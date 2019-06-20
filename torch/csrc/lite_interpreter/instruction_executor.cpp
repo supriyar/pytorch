@@ -138,9 +138,9 @@ IValue InstructionExecutor::run(Stack& stack) {
       int reg = inst.outputs[i].unique_id;
       registers[reg] = pop(stack);
       //if (reg == 0 || reg == 1 || reg == 2 || reg == 3) {
-        std::ostringstream out;
-        out << registers[reg];
-        std::cout << " Register " << reg << " " << out.str().substr(0, 80) << std::endl;
+        //std::ostringstream out;
+        //out << registers[reg];
+        //std::cout << " Register " << reg << " " << out.str().substr(0, 80) << std::endl;
       //}
 //      std::cout << "pop reg[" << reg << "];\n" << registers[reg] << "\n";
     }
