@@ -104,11 +104,7 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
 };
 
 static auto registry = c10::RegisterOperators().op(
-    "quantized::qnnpack_max_pool2d(Tensor input, "
-                          "int[] kernel_size, "
-                          "int[] stride, "
-                          "int[] dilation, "
-                          "int[] padding) -> Tensor",
+    "quantized::qnnpack_max_pool2d(Tensor input, int[] kernel_size, int[] stride, int[] dilation, int[] padding) -> Tensor",
     c10::RegisterOperators::options()
       .kernel<QNNPACKMaxPool>(QuantizedCPUTensorId()));
 }  // namespace

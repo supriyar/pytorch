@@ -24,11 +24,12 @@ class QNNPACKFullyConnected final : public c10::OperatorKernel {
 
     // C(output) = A(input_contig) x B(weight), where C, A, B are M x N, M x K, K x N
     // matrices, respectively.
-    int64_t M = 1;
-    for (size_t i = 0; i < input_contig.dim() - 1; ++i) {
-      M *= input_contig.size(i);
+    int64_t M = input_contig.size(0);
+    int64_t K = 1;
+    for (size_t i = 1; i < input_contig.dim(); ++i) {
+      K *= input_contig.size(i);
     }
-    int64_t K = input_contig.size(input_contig.dim() - 1);
+
     int64_t N = weight.size(0);
 
     TORCH_CHECK(K == weight.size(1),
