@@ -116,6 +116,12 @@ static auto registry0 = torch::RegisterOperators().op(
     return a.view(list);
   })
 ).op(
+  "aten::permute_Tensor_int[]__Tensor",
+  torch::RegisterOperators::options().kernel(at::CPUTensorId(),
+  [](at::Tensor a, std::vector<int64_t> dims) ->at::Tensor {
+    return a.permute(dims);
+  })
+).op(
   "aten::dim_Tensor__int",
   torch::RegisterOperators::options().kernel(at::CPUTensorId(),
   [](at::Tensor a) ->int64_t {

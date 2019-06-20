@@ -11,7 +11,7 @@ static at::Tensor output;
 static std::shared_ptr<torch::jit::GenericInstructionList> model;
 
 void allocate_input_buffer(int c, int h, int w) {
-  input = at::zeros({1, c, h, w}, at::dtype(at::kFloat));
+  input = at::zeros({1, h, w, c}, at::dtype(at::kFloat));
 }
 
 float* input_buffer() {
