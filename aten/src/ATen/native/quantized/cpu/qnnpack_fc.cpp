@@ -31,6 +31,7 @@ class QNNPACKFullyConnected final : public c10::OperatorKernel {
     }
 
     int64_t N = weight.size(0);
+    std::cout << " M " << M << " N " << N << " K " << K <<std::endl;
 
     TORCH_CHECK(K == weight.size(1),
         "qnnpack_fc(): input size does not match weight dimension 1 size: got ",
