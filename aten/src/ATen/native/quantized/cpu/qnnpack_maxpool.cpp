@@ -1,8 +1,9 @@
+#include "init_qnnpack.h"
+
 #include <ATen/ATen.h>
 #include <ATen/core/Type.h>
 #include <ATen/core/op_registration/op_registration.h>
 #include <THNN/generic/pooling_shape.h>
-#include "init_qnnpack.h"
 
 namespace at { namespace native {
 namespace {
@@ -15,13 +16,14 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
       std::vector<int64_t> stride,
       std::vector<int64_t> dilation,
       std::vector<int64_t> padding) {
+
     Tensor qy;
 
-    Tensor input_contig = input.contiguous();
-
-    TORCH_CHECK(input_contig.ndimension() == 4,
+    TORCH_CHECK(input.ndimension() == 4,
         "qnnpack_maxpool(): Expected input to be 4-dimensional: got ",
-        input_contig.ndimension());
+        input.ndimension());
+
+    Tensor input_contig = input.contiguous();
 
     initQNNPACK();
 
@@ -42,25 +44,25 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
     TORCH_CHECK(strideH > 0 && strideW > 0, "strides should be greater than zero.");
 
     // Input is in NHWC format
-    int64_t bs = input_contig.size(0);
+    int64_t batch_size = input_contig.size(0);
     int64_t inH = input_contig.size(1);
     int64_t inW = input_contig.size(2);
     int64_t inC = input_contig.size(3);
 
     const qnnp_status createStatus = qnnp_create_max_pooling2d_nhwc_u8(
-        padT, /* input_padding_top */
-        padL, /* input_padding_right */
-        padT, /* input_padding_bottom */
-        padL, /* input_padding_left */
-        kH,
-        kW,
-        strideH,
-        strideW,
+        padT /* input_padding_top */,
+        padL /* input_padding_right */,
+        padT /* input_padding_bottom */,
+        padL /* input_padding_left */,
+        kH /* pooling height */,
+        kW /* pooling width */,
+        strideH /* stride height */,
+        strideW /* stride width */,
         dilationH /* dilation height */,
         dilationW /* dilation width */,
-        inC,
-        std::numeric_limits<uint8_t>::min(), // TODO check the limits
-        std::numeric_limits<uint8_t>::max(),
+        inC /* input channels */,
+        std::numeric_limits<uint8_t>::min() /* output min */,
+        std::numeric_limits<uint8_t>::max() /* output max */,
         0 /* flags */,
         &qnnpackOperator_);
     TORCH_INTERNAL_ASSERT(createStatus == qnnp_status_success,
@@ -74,21 +76,21 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
     TORCH_CHECK(outH > 0 && outW > 0, "the resulting output Tensor size should be >= 0");
 
     // NHWC
-    std::vector<int64_t> outSizes{bs, outH, outW, outC};
+    std::vector<int64_t> outSizes{batch_size, outH, outW, outC};
     qy = at::_empty_affine_quantized(outSizes,
                                      at::device(kCPU).dtype(kQUInt8),
                                      scale,
                                      zero_point);
 
     const qnnp_status setupStatus = qnnp_setup_max_pooling2d_nhwc_u8(
-        qnnpackOperator_,
-        bs,
-        inH,
-        inW,
-        (uint8_t*)input_contig.data_ptr(),
-        inC,
-        (uint8_t*)qy.data_ptr(),
-        outC,
+        qnnpackOperator_ /* max pooling */,
+        batch_size /* batch size */,
+        inH /* input height */,
+        inW /* input width */,
+        (uint8_t*)input_contig.data_ptr() /* input */,
+        inC /* input_pixel_stride */,
+        (uint8_t*)qy.data_ptr() /* output data */,
+        outC /* output_pixel_stride */,
         nullptr /* thread pool */);
 
     TORCH_INTERNAL_ASSERT(setupStatus == qnnp_status_success,

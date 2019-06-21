@@ -1,7 +1,8 @@
+#include "init_qnnpack.h"
+
 #include <ATen/ATen.h>
 #include <ATen/core/Type.h>
 #include <ATen/core/op_registration/op_registration.h>
-#include "init_qnnpack.h"
 
 namespace at { namespace native {
 namespace {
@@ -11,14 +12,14 @@ class QNNPACKRelu final : public c10::OperatorKernel {
   Tensor operator()(Tensor input) {
     Tensor qy;
 
+    TORCH_CHECK(input.ndimension() > 0,
+        "qnnpack_relu(): Got empty input tensor");
+
     Tensor input_contig = input.contiguous();
 
     const auto zero_point = input_contig.q_zero_point().toInt();
 
     initQNNPACK();
-
-    TORCH_CHECK(input_contig.ndimension() > 0,
-        "qnnpack_relu(): Got empty input tensor");
 
     size_t volume = 1;
     for (int i = 0; i < input_contig.ndimension(); ++i) {
@@ -30,7 +31,7 @@ class QNNPACKRelu final : public c10::OperatorKernel {
     const qnnp_status createStatus = qnnp_create_clamp_nc_u8(
         channels_x /* channels */,
         zero_point /* output min */,
-        255 /* output max */,
+        std::numeric_limits<uint8_t>::max() /* output max */,
         0 /* flags */,
         &qnnpackOperator_);
     TORCH_INTERNAL_ASSERT(createStatus == qnnp_status_success,
@@ -45,12 +46,12 @@ class QNNPACKRelu final : public c10::OperatorKernel {
     size_t channels_y = volume / qy.size(0);
 
     const qnnp_status setupStatus = qnnp_setup_clamp_nc_u8(
-        qnnpackOperator_,
+        qnnpackOperator_, /* clamp */
         input_contig.size(0) /* batch size */,
-        (uint8_t*)input_contig.data_ptr(),
-        channels_x /* X stride */,
-        (uint8_t*)qy.data_ptr(),
-        channels_y /* Y stride */);
+        (uint8_t*)input_contig.data_ptr() /* input data */,
+        channels_x /* input stride */,
+        (uint8_t*)qy.data_ptr() /* output data */,
+        channels_y /* output stride */);
     TORCH_INTERNAL_ASSERT(setupStatus == qnnp_status_success,
         "failed to setup QNNPACK Relu operator");
 
