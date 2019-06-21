@@ -25,11 +25,11 @@ class QNNPACKRelu final : public c10::OperatorKernel {
     for (int i = 0; i < input_contig.ndimension(); ++i) {
       volume *= input_contig.size(i);
     }
-    size_t channels_x = volume / input_contig.size(0);
+    size_t num_elems_x = volume / input_contig.size(0);
     qnnp_operator_t qnnpackOperator_{nullptr};
 
     const qnnp_status createStatus = qnnp_create_clamp_nc_u8(
-        channels_x /* channels */,
+        num_elems_x /* channels */,
         zero_point /* output min */,
         std::numeric_limits<uint8_t>::max() /* output max */,
         0 /* flags */,
@@ -43,15 +43,15 @@ class QNNPACKRelu final : public c10::OperatorKernel {
                                      input_contig.q_scale().toDouble(),
                                      input_contig.q_zero_point().toLong());
 
-    size_t channels_y = volume / qy.size(0);
+    size_t num_elems_y = volume / qy.size(0);
 
     const qnnp_status setupStatus = qnnp_setup_clamp_nc_u8(
         qnnpackOperator_, /* clamp */
         input_contig.size(0) /* batch size */,
         (uint8_t*)input_contig.data_ptr() /* input data */,
-        channels_x /* input stride */,
+        num_elems_x /* input stride */,
         (uint8_t*)qy.data_ptr() /* output data */,
-        channels_y /* output stride */);
+        num_elems_y /* output stride */);
     TORCH_INTERNAL_ASSERT(setupStatus == qnnp_status_success,
         "failed to setup QNNPACK Relu operator");
 
