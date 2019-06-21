@@ -1,7 +1,8 @@
+#include "init_qnnpack.h"
+
 #include <ATen/ATen.h>
 #include <ATen/core/Type.h>
 #include <ATen/core/op_registration/op_registration.h>
-#include "init_qnnpack.h"
 
 namespace at { namespace native {
 namespace {
@@ -10,6 +11,9 @@ class QNNPACKAdd final : public c10::OperatorKernel {
  public:
   Tensor operator()(Tensor qa, Tensor qb,
       double scale, int64_t zero_point) {
+
+    TORCH_CHECK(qa.ndimension() > 0,
+        "qnnpack_add(): Got empty input tensor");
 
     TORCH_CHECK(
         qa.numel() == qb.numel(),
@@ -33,38 +37,39 @@ class QNNPACKAdd final : public c10::OperatorKernel {
 
     qnnp_operator_t qnnpackOperator_{nullptr};
 
-    TORCH_CHECK(qa_contig.ndimension() > 0,
-        "qnnpack_add(): Got empty input tensor");
-
     size_t volume = 1;
     for (int i = 0; i < qa_contig.ndimension(); ++i) {
       volume *= qa_contig.size(i);
     }
 
-    size_t channels = volume / qa_contig.size(0);
+    size_t num_elems = volume / qa_contig.size(0);
 
     const qnnp_status createStatus = qnnp_create_add_nc_q8(
-        channels /* channels */,
-        a_zero_point, a_scale,
-        b_zero_point, b_scale,
-        static_cast<uint8_t>(zero_point), scale,
-        std::numeric_limits<uint8_t>::min(),
-        std::numeric_limits<uint8_t>::max(),
+        num_elems /* channels */,
+        a_zero_point /* a zero_point */,
+        a_scale /* a scale */,
+        b_zero_point /* b zero_point */,
+        b_scale /* b scale */,
+        static_cast<uint8_t>(zero_point) /* sum zero_point */,
+        scale /* sum scale */,
+        std::numeric_limits<uint8_t>::min() /* output min */,
+        std::numeric_limits<uint8_t>::max() /* output max */,
         0 /* flags */,
         &qnnpackOperator_);
+
     TORCH_INTERNAL_ASSERT(createStatus == qnnp_status_success,
         "failed to create QNNPACK Add operator");
     TORCH_INTERNAL_ASSERT(qnnpackOperator_ != nullptr);
 
     const qnnp_status setupStatus = qnnp_setup_add_nc_q8(
-        qnnpackOperator_,
+        qnnpackOperator_ /* add op */,
         qa_contig.size(0) /* batch size */,
-        (uint8_t*)qa_contig.data_ptr(),
-        channels /* A stride */,
+        (uint8_t*)qa_contig.data_ptr() /* a data */,
+        num_elems /* A stride */,
         (uint8_t*)qb_contig.data_ptr(),
-        channels /* B stride */,
+        num_elems /* B stride */,
         (uint8_t*)qy.data_ptr(),
-        channels /* Y stride */);
+        num_elems /* sum stride */);
     TORCH_INTERNAL_ASSERT(setupStatus == qnnp_status_success,
         "failed to setup QNNPACK Add operator");
 
