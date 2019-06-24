@@ -2,6 +2,8 @@
 #include <aten/src/ATen/core/dispatch/Dispatcher.h>
 #include <sstream>
 
+#include <chrono>
+using namespace std::chrono;
 namespace torch {
 namespace jit {
 
@@ -62,6 +64,7 @@ IValue InstructionExecutor::run(Stack& stack) {
     }
     std::cout << std::endl;
 
+    auto start = high_resolution_clock::now();
     loadTensorsFromRegisters(inst.inputs, stack);
 
 //    std::cout << "stack:" << std::endl;
@@ -145,6 +148,9 @@ IValue InstructionExecutor::run(Stack& stack) {
 //      std::cout << "pop reg[" << reg << "];\n" << registers[reg] << "\n";
     }
     ++pc;
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stop - start);
+  std::cout << "Time taken for op " << duration.count() << std::endl;
   }
 
   return stack.front();

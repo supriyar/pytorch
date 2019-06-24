@@ -5,6 +5,8 @@
 #include <torch/script.h> // One-stop header.
 #include <fstream>
 #include "predictor.h"
+#include <chrono>
+using namespace std::chrono;
 
 static at::Tensor input;
 static at::Tensor output;
@@ -47,7 +49,7 @@ int main(int argc, const char* argv[]) {
   allocate_input_buffer(1, 28, 28);
 
   std::ifstream File;
-  File.open("/home/supriyar/pytorch/torch/csrc/lite_interpreter/mnist_in0.txt");
+  File.open("./mnist_in0.txt");
   std::cout << " Loading input " << std::endl;
   for(int i = 0; i < 28*28; ++i)
   {
@@ -60,7 +62,14 @@ int main(int argc, const char* argv[]) {
   File.close();
   //for (int i = 0; i < 1 * 28 * 28; i++)
   //  input_buffer()[i] = 1.;
+  auto start = high_resolution_clock::now();
+  std::cout << "Starting time " << std::endl;
   run_model();
+  auto stop = high_resolution_clock::now();
+
+  auto duration = duration_cast<milliseconds>(stop - start);
+  std::cout << "Ending time " << std::endl;
+  std::cout << "Time taken for QNNPACK " << duration.count() << std::endl;
   for (int i = 0; i < 10; i++)
     std::cout << output_buffer()[i] << " ";
   std::cout << std::endl;

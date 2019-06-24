@@ -3,6 +3,7 @@
 #include <ATen/ATen.h>
 #include <ATen/core/Type.h>
 #include <ATen/core/op_registration/op_registration.h>
+#include <ATen/native/quantized/cpu/qnnpack_utils.h>
 #include <ATen/quantized/Quantizer.h>
 #include <ATen/Config.h>
 
@@ -35,6 +36,7 @@ SmallVector<int64_t, 4> convOutputShape(
   return out_shape;
 }
 
+template <Activation Ac>
 class QNNPACKConv2d final : public c10::OperatorKernel {
  public:
   Tensor operator()(
@@ -130,8 +132,8 @@ class QNNPACKConv2d final : public c10::OperatorKernel {
             (int32_t*)bias.data_ptr(),   /* bias data */
             outZeroPoint, /* output zero_point */
             outScale, /* output scale */
-            std::numeric_limits<uint8_t>::min(), /* output min */
-            std::numeric_limits<uint8_t>::max(), /* output max */
+            activationLimits(outScale, outZeroPoint, Ac).first, /* output min */
+            activationLimits(outScale, outZeroPoint, Ac).second, /* output max */
             0 /* flags */,
             &qnnpackOperator_);
 
@@ -163,9 +165,12 @@ class QNNPACKConv2d final : public c10::OperatorKernel {
   }
 };
 
-static auto registry = c10::RegisterOperators().op(
-    "quantized::qnnpack_conv2d",
-    c10::RegisterOperators::options()
-      .kernel<QNNPACKConv2d>(QuantizedCPUTensorId()));
+static auto registry = c10::RegisterOperators()
+    .op("quantized::qnnpack_conv2d",
+        c10::RegisterOperators::options()
+        .kernel<QNNPACKConv2d<Activation::NONE>>(QuantizedCPUTensorId()))
+    .op("quantized::qnnpack_conv2d_relu",
+        c10::RegisterOperators::options()
+        .kernel<QNNPACKConv2d<Activation::RELU>>(QuantizedCPUTensorId()));
 }  // namespace
 }}  // namespace at::native
