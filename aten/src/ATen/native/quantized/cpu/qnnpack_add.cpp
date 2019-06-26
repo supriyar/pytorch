@@ -1,38 +1,35 @@
-#include "init_qnnpack.h"
-
 #include <ATen/ATen.h>
 #include <ATen/core/Type.h>
 #include <ATen/core/op_registration/op_registration.h>
 
-namespace at { namespace native {
+#include "init_qnnpack.h"
+
+namespace at {
+namespace native {
 namespace {
 
 class QNNPACKAdd final : public c10::OperatorKernel {
  public:
-  Tensor operator()(Tensor qa, Tensor qb,
-      double scale, int64_t zero_point) {
-
-    TORCH_CHECK(qa.ndimension() > 0,
-        "qnnpack_add(): Got empty input tensor");
+  Tensor operator()(Tensor qa, Tensor qb, double scale, int64_t zero_point) {
+    TORCH_CHECK(qa.ndimension() > 0, "qnnpack_add(): Got empty input tensor");
 
     TORCH_CHECK(
         qa.numel() == qb.numel(),
         "qnnpack_add(): Add operands must be the same size!");
-    TORCH_CHECK(qa.scalar_type() == qb.scalar_type(),
+    TORCH_CHECK(
+        qa.scalar_type() == qb.scalar_type(),
         "qnnpack_add(): Add operands should have same data type.");
 
     Tensor qa_contig = qa.contiguous();
     Tensor qb_contig = qb.contiguous();
 
-    const auto a_zero_point = qa_contig.q_zero_point().toInt();
-    const auto b_zero_point = qb_contig.q_zero_point().toInt();
-    const auto a_scale = qa_contig.q_scale().toDouble();
-    const auto b_scale = qb_contig.q_scale().toDouble();
+    const auto a_zero_point = qa_contig.q_zero_point();
+    const auto b_zero_point = qb_contig.q_zero_point();
+    const auto a_scale = qa_contig.q_scale();
+    const auto b_scale = qb_contig.q_scale();
 
-    Tensor qy = at::_empty_affine_quantized(qa_contig.sizes(),
-                                            at::device(kCPU).dtype(kQUInt8),
-                                            scale,
-                                            zero_point);
+    Tensor qy = at::_empty_affine_quantized(
+        qa_contig.sizes(), at::device(kCPU).dtype(kQUInt8), scale, zero_point);
     initQNNPACK();
 
     qnnp_operator_t qnnpackOperator_{nullptr};
@@ -57,7 +54,8 @@ class QNNPACKAdd final : public c10::OperatorKernel {
         0 /* flags */,
         &qnnpackOperator_);
 
-    TORCH_INTERNAL_ASSERT(createStatus == qnnp_status_success,
+    TORCH_INTERNAL_ASSERT(
+        createStatus == qnnp_status_success,
         "failed to create QNNPACK Add operator");
     TORCH_INTERNAL_ASSERT(qnnpackOperator_ != nullptr);
 
@@ -70,14 +68,15 @@ class QNNPACKAdd final : public c10::OperatorKernel {
         num_elems /* B stride */,
         (uint8_t*)qy.data_ptr(),
         num_elems /* sum stride */);
-    TORCH_INTERNAL_ASSERT(setupStatus == qnnp_status_success,
+    TORCH_INTERNAL_ASSERT(
+        setupStatus == qnnp_status_success,
         "failed to setup QNNPACK Add operator");
 
     const qnnp_status runStatus =
         qnnp_run_operator(qnnpackOperator_, nullptr /* thread pool */);
 
-    TORCH_INTERNAL_ASSERT( runStatus == qnnp_status_success,
-       "failed to run QNNPACK Add operator");
+    TORCH_INTERNAL_ASSERT(
+        runStatus == qnnp_status_success, "failed to run QNNPACK Add operator");
 
     return qy;
   }
@@ -85,7 +84,8 @@ class QNNPACKAdd final : public c10::OperatorKernel {
 
 static auto registry = c10::RegisterOperators().op(
     "quantized::qnnpack_add",
-    c10::RegisterOperators::options()
-      .kernel<QNNPACKAdd>(QuantizedCPUTensorId()));
-}  // namespace
-}}  // namespace at::native
+    c10::RegisterOperators::options().kernel<QNNPACKAdd>(
+        QuantizedCPUTensorId()));
+} // namespace
+} // namespace native
+} // namespace at

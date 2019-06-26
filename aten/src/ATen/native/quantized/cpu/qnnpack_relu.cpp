@@ -1,10 +1,11 @@
-#include "init_qnnpack.h"
-
 #include <ATen/ATen.h>
 #include <ATen/core/Type.h>
 #include <ATen/core/op_registration/op_registration.h>
 
-namespace at { namespace native {
+#include "init_qnnpack.h"
+
+namespace at {
+namespace native {
 namespace {
 
 class QNNPACKRelu final : public c10::OperatorKernel {
@@ -12,12 +13,12 @@ class QNNPACKRelu final : public c10::OperatorKernel {
   Tensor operator()(Tensor input) {
     Tensor qy;
 
-    TORCH_CHECK(input.ndimension() > 0,
-        "qnnpack_relu(): Got empty input tensor");
+    TORCH_CHECK(
+        input.ndimension() > 0, "qnnpack_relu(): Got empty input tensor");
 
     Tensor input_contig = input.contiguous();
 
-    const auto zero_point = input_contig.q_zero_point().toInt();
+    const auto zero_point = input_contig.q_zero_point();
 
     initQNNPACK();
 
@@ -34,14 +35,16 @@ class QNNPACKRelu final : public c10::OperatorKernel {
         std::numeric_limits<uint8_t>::max() /* output max */,
         0 /* flags */,
         &qnnpackOperator_);
-    TORCH_INTERNAL_ASSERT(createStatus == qnnp_status_success,
+    TORCH_INTERNAL_ASSERT(
+        createStatus == qnnp_status_success,
         "failed to create QNNPACK Relu operator");
     TORCH_INTERNAL_ASSERT(qnnpackOperator_ != nullptr);
 
-    qy = at::_empty_affine_quantized(input_contig.sizes(),
-                                     at::device(kCPU).dtype(kQUInt8),
-                                     input_contig.q_scale().toDouble(),
-                                     input_contig.q_zero_point().toLong());
+    qy = at::_empty_affine_quantized(
+        input_contig.sizes(),
+        at::device(kCPU).dtype(kQUInt8),
+        input_contig.q_scale(),
+        input_contig.q_zero_point());
 
     size_t num_elems_y = volume / qy.size(0);
 
@@ -52,14 +55,16 @@ class QNNPACKRelu final : public c10::OperatorKernel {
         num_elems_x /* input stride */,
         (uint8_t*)qy.data_ptr() /* output data */,
         num_elems_y /* output stride */);
-    TORCH_INTERNAL_ASSERT(setupStatus == qnnp_status_success,
+    TORCH_INTERNAL_ASSERT(
+        setupStatus == qnnp_status_success,
         "failed to setup QNNPACK Relu operator");
 
     const qnnp_status runStatus =
         qnnp_run_operator(qnnpackOperator_, nullptr /* thread pool */);
 
-    TORCH_INTERNAL_ASSERT( runStatus == qnnp_status_success,
-       "failed to run QNNPACK Relu operator");
+    TORCH_INTERNAL_ASSERT(
+        runStatus == qnnp_status_success,
+        "failed to run QNNPACK Relu operator");
 
     return qy;
   }
@@ -67,7 +72,8 @@ class QNNPACKRelu final : public c10::OperatorKernel {
 
 static auto registry = c10::RegisterOperators().op(
     "quantized::qnnpack_relu(Tensor input) -> Tensor",
-    c10::RegisterOperators::options()
-      .kernel<QNNPACKRelu>(QuantizedCPUTensorId()));
-}  // namespace
-}}  // namespace at::native
+    c10::RegisterOperators::options().kernel<QNNPACKRelu>(
+        QuantizedCPUTensorId()));
+} // namespace
+} // namespace native
+} // namespace at
