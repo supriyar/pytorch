@@ -140,3 +140,77 @@ class Linear(NNLinear):
         super()._load_from_state_dict(state_dict, prefix, local_metadata, False,
                                       missing_keys, unexpected_keys, error_msgs)
         return
+
+@weak_module
+class QNNPackLinear(NNLinear):
+    r"""
+    A quantized linear module with quantized tensor as inputs
+    and outputs.
+    We adopt the same interface as `torch.nn.Linear`, please see https://pytorch.org/docs/stable/nn.html#torch.nn.Linear
+    for documentation.
+
+    Similar to `torch.nn.Linear`, attributes will be randomly initialized at
+        module creation time and will be overwritten later
+
+    Attributes:
+        weight: the non-learnable quantized weights of the
+                module which are of shape :math:`(\text{out\_features}, \text{in\_features})`.
+        bias:   the non-learnable bias of the module of shape :math:`(\text{out\_features})`.
+                If :attr:`bias` is ``True``, the values are initialized to zero.
+        out_scale: `scale` parameter of output Quantized Tensor, type: float
+        out_zero_point: `zero_point` parameter for output Quantized Tensor, type: long
+
+    Examples::
+
+        >>> m = nn.quantized.QNNPackLinear(20, 30)
+        >>> input = torch.randn(128, 20)
+        >>> output = m(input)
+        >>> print(output.size())
+        torch.Size([128, 30])
+    """
+    __constants__ = ['bias', 'in_features', 'out_features']
+
+    def __init__(self, in_features, out_features, bias=True):
+        assert bias, 'nobias is not supported in QNNPack Quantized Linear module yet'
+        super(QNNPackLinear, self).__init__(in_features, out_features, bias)
+        del self.weight
+        del self.bias
+        qweight = torch._empty_affine_quantized(
+            [out_features, in_features], scale=1, zero_point=0,
+            dtype=torch.quint8)
+        qbias = torch._empty_affine_quantized(
+            [out_features], scale=1, zero_point=0, dtype=torch.qint32)
+        self.register_buffer('_weight', qweight)
+        self.register_buffer('bias', qbias)
+        self.register_buffer('out_scale', torch.Tensor([1]))
+        self.register_buffer('out_zero_point', torch.Tensor([0]))
+
+    @property
+    def weight(self):
+        return self._weight
+
+    @weight.setter
+    def weight(self, w):
+        self._weight = w #torch.ops.quantized.fbgemm_linear_prepack(w)
+
+    def forward(self, x):
+        Y_q = torch.ops.quantized.qnnpack_fc(
+            x, self._weight,
+            self.bias,
+            self.out_scale,
+            self.out_zero_point)
+        return Y_q
+
+    def _save_to_state_dict(self, destination, prefix, keep_vars):
+        super()._save_to_state_dict(destination, prefix, keep_vars)
+        destination[prefix + 'weight'] = destination[prefix + '_weight']
+        destination.pop(prefix + '_weight')
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        self._weight = state_dict[prefix + 'weight']
+        self.bias.copy_(state_dict[prefix + 'bias'])
+        state_dict.pop(prefix + 'weight')
+        state_dict.pop(prefix + 'bias')
+        super(QNNPackLinear, self)._load_from_state_dict(state_dict, prefix, local_metadata, False, missing_keys, unexpected_keys, error_msgs)
+        return
