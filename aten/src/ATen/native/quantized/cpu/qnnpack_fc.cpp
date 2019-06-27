@@ -5,6 +5,7 @@
 #include <ATen/quantized/Quantizer.h>
 
 #include "init_qnnpack.h"
+#include "qnnpack_utils.h"
 
 namespace at {
 namespace native {
@@ -93,7 +94,7 @@ class QNNPACKFullyConnected final : public c10::OperatorKernel {
         setupStatus == qnnp_status_success,
         "failed to setup QNNPACK fully connected operator");
     const qnnp_status runStatus =
-        qnnp_run_operator(qnnpackOperator_, nullptr /* thread pool */);
+        qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
 
     TORCH_INTERNAL_ASSERT(
         runStatus == qnnp_status_success, "failed to run QNNPACK operator");
