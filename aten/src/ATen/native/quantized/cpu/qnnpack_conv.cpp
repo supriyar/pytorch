@@ -5,10 +5,28 @@
 #include <ATen/core/op_registration/op_registration.h>
 #include <ATen/native/quantized/cpu/qnnpack_utils.h>
 #include <ATen/quantized/Quantizer.h>
-#include <ATen/Config.h>
+#include <thread>
+#include "init_qnnpack.h"
 
-namespace at { namespace native {
+namespace at {
+namespace native {
 namespace {
+/*
+static pthreadpool_t nnpack_threadpool_ = nullptr;
+pthreadpool_t nnpack_threadpool() {
+  unsigned int threads;
+  #ifdef INTRA_OP_PARALLEL
+      threads = at::get_num_threads();
+  #else
+      threads = std::thread::hardware_concurrency();
+  #endif
+  nnpack_threadpool_ = pthreadpool_create(threads);
+  if (nnpack_threadpool_ == nullptr) {
+    throw std::runtime_error("could not initialize QNNPack's pthreadpool");
+  }
+  std::cout << "Num threads " << threads <<std::endl;
+  return nnpack_threadpool_;
+}*/
 
 
 SmallVector<int64_t, 4> convOutputShape(
@@ -142,21 +160,22 @@ class QNNPACKConv2d final : public c10::OperatorKernel {
     TORCH_INTERNAL_ASSERT(qnnpackOperator_ != nullptr);
 
     const qnnp_status setupStatus = qnnp_setup_convolution2d_nhwc_q8(
-            qnnpackOperator_ /* convolution */,
-            N /* batch_size */,
-            H /* input height */,
-            W /* input width */,
-            (uint8_t*)act.data_ptr(), /* input data */
-            in_ch /* input pixel stride */,
-            (uint8_t*)output.data_ptr(), /* output data */
-            out_ch /* output pixel stride */,
-            nullptr /* threadpool */);
+        qnnpackOperator_ /* convolution */,
+        N /* batch_size */,
+        H /* input height */,
+        W /* input width */,
+        (uint8_t*)act.data_ptr(), /* input data */
+        in_ch /* input pixel stride */,
+        (uint8_t*)output.data_ptr(), /* output data */
+        out_ch /* output pixel stride */,
+        qnnpack_threadpool() /* threadpool */);
 
-    TORCH_INTERNAL_ASSERT(setupStatus == qnnp_status_success,
+    TORCH_INTERNAL_ASSERT(
+        setupStatus == qnnp_status_success,
         "failed to setup QNNPACK Conv2D operator");
 
     const qnnp_status runStatus =
-        qnnp_run_operator(qnnpackOperator_, nullptr /* thread pool */);
+        qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
 
     TORCH_INTERNAL_ASSERT(
         runStatus == qnnp_status_success, "failed to run QNNPACK Conv operator");

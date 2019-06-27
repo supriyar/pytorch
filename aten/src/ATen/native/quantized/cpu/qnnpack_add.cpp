@@ -4,7 +4,11 @@
 #include <ATen/core/Type.h>
 #include <ATen/core/op_registration/op_registration.h>
 
-namespace at { namespace native {
+#include "init_qnnpack.h"
+#include "qnnpack_utils.h"
+
+namespace at {
+namespace native {
 namespace {
 
 class QNNPACKAdd final : public c10::OperatorKernel {
@@ -74,7 +78,7 @@ class QNNPACKAdd final : public c10::OperatorKernel {
         "failed to setup QNNPACK Add operator");
 
     const qnnp_status runStatus =
-        qnnp_run_operator(qnnpackOperator_, nullptr /* thread pool */);
+        qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
 
     TORCH_INTERNAL_ASSERT( runStatus == qnnp_status_success,
        "failed to run QNNPACK Add operator");

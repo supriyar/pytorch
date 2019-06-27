@@ -5,7 +5,11 @@
 #include <ATen/core/op_registration/op_registration.h>
 #include <THNN/generic/pooling_shape.h>
 
-namespace at { namespace native {
+#include "init_qnnpack.h"
+#include "qnnpack_utils.h"
+
+namespace at {
+namespace native {
 namespace {
 
 class QNNPACKMaxPool final : public c10::OperatorKernel {
@@ -91,13 +95,13 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
         inC /* input_pixel_stride */,
         (uint8_t*)qy.data_ptr() /* output data */,
         outC /* output_pixel_stride */,
-        nullptr /* thread pool */);
+        qnnpack_threadpool() /* thread pool */);
 
     TORCH_INTERNAL_ASSERT(setupStatus == qnnp_status_success,
         "failed to setup QNNPACK MaxPool operator");
 
     const qnnp_status runStatus =
-        qnnp_run_operator(qnnpackOperator_, nullptr /* thread pool */);
+        qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
 
     TORCH_INTERNAL_ASSERT( runStatus == qnnp_status_success,
        "failed to run QNNPACK MaxPool operator");

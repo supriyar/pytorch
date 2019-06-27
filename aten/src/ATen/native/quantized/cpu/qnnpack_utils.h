@@ -2,6 +2,24 @@
 
 #include "qnnpack.h"
 #include <ATen/ATen.h>
+#include <thread>
+
+static pthreadpool_t qnnpack_threadpool_ = nullptr;
+
+static pthreadpool_t qnnpack_threadpool() {
+  unsigned int threads;
+  #ifdef INTRA_OP_PARALLEL
+      threads = at::get_num_threads();
+  #else
+      threads = std::thread::hardware_concurrency();
+  #endif
+  qnnpack_threadpool_ = pthreadpool_create(threads);
+  if (qnnpack_threadpool_ == nullptr) {
+    throw std::runtime_error("could not initialize QNNPack's pthreadpool");
+  }
+  std::cout << "Num threads " << threads <<std::endl;
+  return qnnpack_threadpool_;
+}
 
 enum class Activation : uint8_t { NONE = 0, RELU = 1 };
 
