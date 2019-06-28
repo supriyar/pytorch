@@ -17,7 +17,6 @@ static pthreadpool_t qnnpack_threadpool() {
   if (qnnpack_threadpool_ == nullptr) {
     throw std::runtime_error("could not initialize QNNPack's pthreadpool");
   }
-  std::cout << "Num threads " << threads <<std::endl;
   return qnnpack_threadpool_;
 }
 

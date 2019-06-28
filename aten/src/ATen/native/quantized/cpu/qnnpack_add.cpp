@@ -9,7 +9,7 @@ namespace at {
 namespace native {
 namespace {
 
-class QNNPACKAdd final : public c10::OperatorKernel {
+class QNNPACKAdd final : public torch::OperatorKernel {
  public:
   Tensor operator()(Tensor qa, Tensor qb, double scale, int64_t zero_point) {
     TORCH_CHECK(qa.ndimension() > 0, "qnnpack_add(): Got empty input tensor");
@@ -83,9 +83,9 @@ class QNNPACKAdd final : public c10::OperatorKernel {
   }
 };
 
-static auto registry = c10::RegisterOperators().op(
+static auto registry = torch::RegisterOperators().op(
     "quantized::qnnpack_add",
-    c10::RegisterOperators::options().kernel<QNNPACKAdd>(
+    torch::RegisterOperators::options().kernel<QNNPACKAdd>(
         QuantizedCPUTensorId()));
 } // namespace
 } // namespace native

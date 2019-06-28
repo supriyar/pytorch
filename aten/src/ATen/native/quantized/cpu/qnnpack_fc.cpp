@@ -11,7 +11,7 @@ namespace at {
 namespace native {
 namespace {
 
-class QNNPACKFullyConnected final : public c10::OperatorKernel {
+class QNNPACKFullyConnected final : public torch::OperatorKernel {
  public:
   Tensor operator()(
       at::Tensor input,
@@ -93,8 +93,8 @@ class QNNPACKFullyConnected final : public c10::OperatorKernel {
     TORCH_INTERNAL_ASSERT(
         setupStatus == qnnp_status_success,
         "failed to setup QNNPACK fully connected operator");
-    const qnnp_status runStatus =
-        qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
+    const qnnp_status runStatus = qnnp_run_operator(
+        qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
 
     TORCH_INTERNAL_ASSERT(
         runStatus == qnnp_status_success, "failed to run QNNPACK operator");
@@ -103,9 +103,9 @@ class QNNPACKFullyConnected final : public c10::OperatorKernel {
   }
 };
 
-static auto registry = c10::RegisterOperators().op(
+static auto registry = torch::RegisterOperators().op(
     "quantized::qnnpack_fc(Tensor X, Tensor W, Tensor b, float Y_scale, int Y_zero_point) -> Tensor",
-    c10::RegisterOperators::options().kernel<QNNPACKFullyConnected>(
+    torch::RegisterOperators::options().kernel<QNNPACKFullyConnected>(
         QuantizedCPUTensorId()));
 } // namespace
 } // namespace native

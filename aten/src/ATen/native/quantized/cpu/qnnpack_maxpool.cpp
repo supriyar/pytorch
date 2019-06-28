@@ -10,7 +10,7 @@ namespace at {
 namespace native {
 namespace {
 
-class QNNPACKMaxPool final : public c10::OperatorKernel {
+class QNNPACKMaxPool final : public torch::OperatorKernel {
  public:
   Tensor operator()(
       Tensor input,
@@ -103,8 +103,8 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
         setupStatus == qnnp_status_success,
         "failed to setup QNNPACK MaxPool operator");
 
-    const qnnp_status runStatus =
-        qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
+    const qnnp_status runStatus = qnnp_run_operator(
+        qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
 
     TORCH_INTERNAL_ASSERT(
         runStatus == qnnp_status_success,
@@ -113,9 +113,9 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
   }
 };
 
-static auto registry = c10::RegisterOperators().op(
+static auto registry = torch::RegisterOperators().op(
     "quantized::qnnpack_max_pool2d(Tensor input, int[] kernel_size, int[] stride, int[] dilation, int[] padding) -> Tensor",
-    c10::RegisterOperators::options().kernel<QNNPACKMaxPool>(
+    torch::RegisterOperators::options().kernel<QNNPACKMaxPool>(
         QuantizedCPUTensorId()));
 } // namespace
 } // namespace native

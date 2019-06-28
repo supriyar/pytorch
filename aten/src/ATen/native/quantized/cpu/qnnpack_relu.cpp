@@ -9,7 +9,7 @@ namespace at {
 namespace native {
 namespace {
 
-class QNNPACKRelu final : public c10::OperatorKernel {
+class QNNPACKRelu final : public torch::OperatorKernel {
  public:
   Tensor operator()(Tensor input) {
     Tensor qy;
@@ -60,8 +60,8 @@ class QNNPACKRelu final : public c10::OperatorKernel {
         setupStatus == qnnp_status_success,
         "failed to setup QNNPACK Relu operator");
 
-    const qnnp_status runStatus =
-        qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
+    const qnnp_status runStatus = qnnp_run_operator(
+        qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
 
     TORCH_INTERNAL_ASSERT(
         runStatus == qnnp_status_success,
@@ -71,9 +71,9 @@ class QNNPACKRelu final : public c10::OperatorKernel {
   }
 };
 
-static auto registry = c10::RegisterOperators().op(
+static auto registry = torch::RegisterOperators().op(
     "quantized::qnnpack_relu(Tensor input) -> Tensor",
-    c10::RegisterOperators::options().kernel<QNNPACKRelu>(
+    torch::RegisterOperators::options().kernel<QNNPACKRelu>(
         QuantizedCPUTensorId()));
 } // namespace
 } // namespace native

@@ -1,5 +1,6 @@
+#include "init_qnnpack.h"
+
 #include <ATen/ATen.h>
-#include <ATen/Config.h>
 #include <ATen/core/Type.h>
 #include <ATen/core/op_registration/op_registration.h>
 #include <ATen/native/quantized/cpu/qnnpack_utils.h>
@@ -52,7 +53,7 @@ SmallVector<int64_t, 4> convOutputShape(
 }
 
 template <Activation Ac>
-class QNNPACKConv2d final : public c10::OperatorKernel {
+class QNNPACKConv2d final : public torch::OperatorKernel {
  public:
   Tensor operator()(
       Tensor act,
@@ -180,8 +181,8 @@ class QNNPACKConv2d final : public c10::OperatorKernel {
         setupStatus == qnnp_status_success,
         "failed to setup QNNPACK Conv2D operator");
 
-    const qnnp_status runStatus =
-        qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
+    const qnnp_status runStatus = qnnp_run_operator(
+        qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
 
     TORCH_INTERNAL_ASSERT(
         runStatus == qnnp_status_success,
@@ -191,13 +192,13 @@ class QNNPACKConv2d final : public c10::OperatorKernel {
   }
 };
 
-static auto registry = c10::RegisterOperators()
+static auto registry = torch::RegisterOperators()
                            .op("quantized::qnnpack_conv2d",
-                               c10::RegisterOperators::options()
+                               torch::RegisterOperators::options()
                                    .kernel<QNNPACKConv2d<Activation::NONE>>(
                                        QuantizedCPUTensorId()))
                            .op("quantized::qnnpack_conv2d_relu",
-                               c10::RegisterOperators::options()
+                               torch::RegisterOperators::options()
                                    .kernel<QNNPACKConv2d<Activation::RELU>>(
                                        QuantizedCPUTensorId()));
 } // namespace
