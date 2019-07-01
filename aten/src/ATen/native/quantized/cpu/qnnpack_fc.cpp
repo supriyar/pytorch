@@ -20,29 +20,29 @@ class QNNPACKFullyConnected final : public torch::OperatorKernel {
       double output_scale,
       int64_t output_zero_point) {
     TORCH_CHECK(input.dim() >= 2, "Input tensor rank should be >= 2");
-
+    TORCH_CHECK(weight.dim() == 2, "Weight tensor rank should be == 2");
     Tensor input_contig = input.contiguous();
 
     // C(output) = A(input_contig) x B(weight), where C, A, B are M x N, M x K,
     // N x K matrices, respectively.
-    int64_t rows_a = input_contig.size(0);
-    int64_t cols_a = 1;
-    for (size_t i = 1; i < input_contig.dim(); ++i) {
-      cols_a *= input_contig.size(i);
+    int64_t rows_a = 1;//input_contig.size(0);
+    int64_t cols_a = input_contig.size(input_contig.dim() - 1);
+    for (size_t i = 0; i < input_contig.dim()-1; ++i) {
+      rows_a *= input_contig.size(i);
     }
 
     int64_t rows_b = weight.size(0);
 
     TORCH_CHECK(
         cols_a == weight.size(1),
-        "qnnpack_fc(): input size does not match weight dimension 1 size: got ",
+        "qnnpack_linear(): input size does not match weight dimension 1 size: got ",
         cols_a,
         " but expected ",
         weight.size(1));
 
     TORCH_CHECK(
         !bias.defined() || (bias.ndimension() == 1 && bias.size(0) == rows_b),
-        "qnnpack_fc(): Given weight of size ",
+        "qnnpack_linear(): Given weight of size ",
         weight.sizes(),
         ", expected bias to be 1-dimensional with ",
         rows_b,
@@ -57,7 +57,7 @@ class QNNPACKFullyConnected final : public torch::OperatorKernel {
     // Allocate output Tensor and a buffer for QNNPACK to use
     Tensor output = at::_empty_affine_quantized(
         {rows_a, rows_b},
-        at::device(kCPU).dtype(kQUInt8),
+        input.options(),
         output_scale,
         output_zero_point);
 
@@ -104,7 +104,7 @@ class QNNPACKFullyConnected final : public torch::OperatorKernel {
 };
 
 static auto registry = torch::RegisterOperators().op(
-    "quantized::qnnpack_fc(Tensor X, Tensor W, Tensor b, float Y_scale, int Y_zero_point) -> Tensor",
+    "quantized::qnnpack_linear(Tensor X, Tensor W, Tensor b, float Y_scale, int Y_zero_point) -> Tensor",
     torch::RegisterOperators::options().kernel<QNNPACKFullyConnected>(
         QuantizedCPUTensorId()));
 } // namespace

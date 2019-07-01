@@ -43,7 +43,7 @@ class QNNPACKRelu final : public torch::OperatorKernel {
 
     qy = at::_empty_affine_quantized(
         input_contig.sizes(),
-        at::device(kCPU).dtype(kQUInt8),
+        input.options(),
         input_contig.q_scale(),
         input_contig.q_zero_point());
 
