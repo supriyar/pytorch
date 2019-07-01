@@ -2,7 +2,9 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import torch
 from ...modules.module import Module
 from ...modules.linear import Linear as NNLinear
+from ...modules.conv import Conv2d as NNConv
 from ...._jit_internal import weak_module
+from ...modules.utils import _pair
 
 @weak_module
 class Quantize(Module):
@@ -194,7 +196,7 @@ class QNNPackLinear(NNLinear):
         self._weight = w #torch.ops.quantized.fbgemm_linear_prepack(w)
 
     def forward(self, x):
-        Y_q = torch.ops.quantized.qnnpack_fc(
+        Y_q = torch.ops.quantized.qnnpack_linear(
             x, self._weight,
             self.bias,
             self.out_scale,
@@ -202,7 +204,7 @@ class QNNPackLinear(NNLinear):
         return Y_q
 
     def _save_to_state_dict(self, destination, prefix, keep_vars):
-        super()._save_to_state_dict(destination, prefix, keep_vars)
+        super(QNNPackLinear, self)._save_to_state_dict(destination, prefix, keep_vars)
         destination[prefix + 'weight'] = destination[prefix + '_weight']
         destination.pop(prefix + '_weight')
 
@@ -213,4 +215,78 @@ class QNNPackLinear(NNLinear):
         state_dict.pop(prefix + 'weight')
         state_dict.pop(prefix + 'bias')
         super(QNNPackLinear, self)._load_from_state_dict(state_dict, prefix, local_metadata, False, missing_keys, unexpected_keys, error_msgs)
+        return
+
+@weak_module
+class QNNPackConv(NNConv):
+    r"""
+    A quantized conv module with quantized tensor as inputs
+    and outputs.
+    We adopt the same interface as `torch.nn.Conv2d`, please see TODO
+    for documentation.
+
+    Similar to `torch.nn.Conv2d`, attributes will be randomly initialized at
+        module creation time and will be overwritten later
+
+    Attributes:
+
+    Examples::
+
+    """
+    __constants__ = ['stride', 'padding', 'dilation', 'groups', 'bias',
+                     'padding_mode', 'output_padding', 'in_channels',
+                     'out_channels', 'kernel_size']
+
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
+                 padding=0, dilation=1, groups=1,
+                 bias=True, padding_mode='zeros'):
+        assert bias, 'nobias is not supported in QNNPack Quantized Conv module yet'
+        super(QNNPackConv, self).__init__(in_channels, out_channels, kernel_size, stride,
+                     padding, dilation, groups, bias, padding_mode)
+        del self.weight
+        del self.bias
+        qweight = torch._empty_affine_quantized(
+            [out_channels, kernel_size, kernel_size, in_channels], scale=1, zero_point=0,
+            dtype=torch.quint8)
+        qbias = torch._empty_affine_quantized(
+            [out_channels], scale=1, zero_point=0, dtype=torch.qint32)
+        kernel_size = _pair(kernel_size)
+        stride = _pair(stride)
+        padding = _pair(padding)
+        dilation = _pair(dilation)
+        self.register_buffer('_weight', qweight)
+        self.register_buffer('bias', qbias)
+        self.register_buffer('out_scale', torch.Tensor([1]))
+        self.register_buffer('out_zero_point', torch.Tensor([0]))
+
+    @property
+    def weight(self):
+        return self._weight
+
+    @weight.setter
+    def weight(self, w):
+        self._weight = w #torch.ops.quantized.fbgemm_linear_prepack(w)
+
+    def forward(self, x):
+        Y_q = torch.ops.quantized.qnnpack_conv2d_relu(x, self._weight,
+                                        self.bias, [self.stride[0],self.stride[1]],
+                                        [self.padding[0], self.padding[1]],
+                                        [self.dilation[0], self.dilation[1]],
+                                        self.groups,
+                                        self.out_scale,
+                                        self.out_zero_point)
+        return Y_q
+
+    def _save_to_state_dict(self, destination, prefix, keep_vars):
+        super(QNNPackConv, self)._save_to_state_dict(destination, prefix, keep_vars)
+        destination[prefix + 'weight'] = destination[prefix + '_weight']
+        destination.pop(prefix + '_weight')
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        self._weight = state_dict[prefix + 'weight']
+        self.bias.copy_(state_dict[prefix + 'bias'])
+        state_dict.pop(prefix + 'weight')
+        state_dict.pop(prefix + 'bias')
+        super(QNNPackConv, self)._load_from_state_dict(state_dict, prefix, local_metadata, False, missing_keys, unexpected_keys, error_msgs)
         return
