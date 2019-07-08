@@ -35,6 +35,9 @@ const caffe2::TypeMeta& DataTypeStringToTypeMeta(const std::string& dt) {
     {"INT64", caffe2::TypeMeta::Make<int64_t>()},
     {"FLOAT16", caffe2::TypeMeta::Make<at::Half>()},
     {"DOUBLE", caffe2::TypeMeta::Make<double>()},
+    {"QINT8", caffe2::TypeMeta::Make<c10::qint8>()},
+    {"QUINT8", caffe2::TypeMeta::Make<c10::quint8>()},
+    {"QINT32", caffe2::TypeMeta::Make<c10::qint32>()},
   };
   const auto it = type_meta_map.find(dt);
   if (it == type_meta_map.end()) {
@@ -144,6 +147,9 @@ at::Tensor InstructionsDeserializer::loadTensor(
   int64_t offset = 0;
   bool requires_grad = false;
   std::string deviceString;
+  bool is_quantized = false;
+  int64_t q_zero_pt = 0;
+  float q_scale = 1.0;
   for (auto node : tNode->value) {
     std::string key(node->key);
     if (key == "dims") {
@@ -167,7 +173,16 @@ at::Tensor InstructionsDeserializer::loadTensor(
       }
     } else if (key == "device") {
       deviceString = node->value.toString();
+    } else if (key == "isQuantized") {
+      if (node->value.getTag() == JSON_TRUE) {
+        is_quantized = true;
+      }
+    } else if (key == "scale") {
+      q_scale = node->value.toNumber();
+    } else if (key == "zeroPoint") {
+      q_zero_pt = std::stoi(node->value.toString());
     }
+
   }
   auto type = at::typeMetaToScalarType(DataTypeStringToTypeMeta(typeString));
 
@@ -215,6 +230,15 @@ at::Tensor InstructionsDeserializer::loadTensor(
   }
 
   at::Tensor result;
+  if (is_quantized) {
+    result = at::_empty_affine_quantized(
+        {0},
+        type,
+        q_scale,
+        q_zero_pt)
+        .set_(storage_it->second, offset, dims, strides);
+  }
+  else {
   if (device.type() == at::DeviceType::CPU) {
     result =
         at::empty({0}, at::CPU(type).options())
@@ -223,6 +247,7 @@ at::Tensor InstructionsDeserializer::loadTensor(
     result =
         at::empty({0}, at::CUDA(type).options())
             .set_(storage_it->second, offset, dims, strides);
+  }
   }
   AT_ASSERT(result.defined());
 
