@@ -11,6 +11,15 @@ namespace {
 
 template <typename self_T>
 void copy_kernel_cast(TensorIterator& iter) {
+  ScalarType dtype = iter.dtype(1);
+  if (isQIntType(iter.dtype(1))) {
+      AT_DISPATCH_QINT_TYPES(dtype, "copy_kernel", [&] {
+        unary_kernel(
+            iter,
+            [=](scalar_t a) -> scalar_t {return a; });
+      });
+  }
+  else {
   AT_DISPATCH_ALL_TYPES_AND2(
       ScalarType::Half,
       ScalarType::Bool,
@@ -22,6 +31,7 @@ void copy_kernel_cast(TensorIterator& iter) {
               static_cast<at::native::inter_copy_type_t<self_T>>(a));
         });
       });
+    }
 }
 
 static void copy_kernel(TensorIterator& iter, bool non_blocking) {
