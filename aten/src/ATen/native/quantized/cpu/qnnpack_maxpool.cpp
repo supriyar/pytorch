@@ -7,6 +7,9 @@
 
 #include "init_qnnpack.h"
 #include "qnnpack_utils.h"
+#include "init_qnnpack.h"
+#include <chrono>
+using namespace std::chrono;
 
 namespace at {
 namespace native {
@@ -53,6 +56,7 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
     int64_t inW = input_contig.size(2);
     int64_t inC = input_contig.size(3);
 
+    auto start = high_resolution_clock::now();
     const qnnp_status createStatus = qnnp_create_max_pooling2d_nhwc_u8(
         padT /* input_padding_top */,
         padL /* input_padding_right */,
@@ -72,7 +76,10 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
     TORCH_INTERNAL_ASSERT(createStatus == qnnp_status_success,
         "failed to create QNNPACK MaxPool operator");
     TORCH_INTERNAL_ASSERT(qnnpackOperator_ != nullptr);
-
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stop - start);
+    std::string op_name = "qnnpack_maxpool_create" + to_string(inC);
+    std::cout << "Caffe2Observer {\"type\": \""<< op_name << "\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << duration.count() << "}" << std::endl;
     int64_t outC = inC;
     int64_t outH = pooling_output_shape(inH, kH, padT, strideH, dilationH, false);
     int64_t outW = pooling_output_shape(inW, kW, padL, strideW, dilationW, false);
@@ -86,6 +93,7 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
                                      scale,
                                      zero_point);
 
+    start = high_resolution_clock::now();
     const qnnp_status setupStatus = qnnp_setup_max_pooling2d_nhwc_u8(
         qnnpackOperator_ /* max pooling */,
         batch_size /* batch size */,
@@ -96,13 +104,20 @@ class QNNPACKMaxPool final : public c10::OperatorKernel {
         (uint8_t*)qy.data_ptr() /* output data */,
         outC /* output_pixel_stride */,
         qnnpack_threadpool() /* thread pool */);
-
+   stop = high_resolution_clock::now();
+   duration = duration_cast<milliseconds>(stop - start);
+    op_name = "qnnpack_maxpool_setup" + to_string(inC);
+    std::cout << "Caffe2Observer {\"type\": \""<< op_name << "\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << duration.count() << "}" << std::endl;
     TORCH_INTERNAL_ASSERT(setupStatus == qnnp_status_success,
         "failed to setup QNNPACK MaxPool operator");
 
+    start = high_resolution_clock::now();
     const qnnp_status runStatus =
         qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
-
+     stop = high_resolution_clock::now();
+     duration = duration_cast<milliseconds>(stop - start);
+    op_name = "qnnpack_maxpool_run" + to_string(inC);
+    std::cout << "Caffe2Observer {\"type\": \""<< op_name << "\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << duration.count() << "}" << std::endl;
     TORCH_INTERNAL_ASSERT( runStatus == qnnp_status_success,
        "failed to run QNNPACK MaxPool operator");
     return qy;

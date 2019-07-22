@@ -7,6 +7,8 @@
 #include <ATen/quantized/Quantizer.h>
 #include <thread>
 #include "init_qnnpack.h"
+#include <chrono>
+using namespace std::chrono;
 
 namespace at {
 namespace native {
@@ -75,7 +77,6 @@ class QNNPACKConv2d final : public c10::OperatorKernel {
     const auto out_ch = weight.size(0);
     const auto kH = weight.size(1);
     const auto kW = weight.size(2);
-
     TORCH_CHECK(!bias.defined() || (bias.ndimension() == 1 && bias.size(0) == out_ch * groups),
         "qnnpack_conv2d(): Given weight of size ", weight.sizes(),
         ", expected bias to be 1-dimensional with ", out_ch * groups, " elements",
@@ -87,7 +88,6 @@ class QNNPACKConv2d final : public c10::OperatorKernel {
     int W = act.size(2);
     int in_ch = act.size(3);
     int K = bias.size(0); // output channels
-
     std::vector<int64_t> kernel{kH, kW};
 
     initQNNPACK();
@@ -127,6 +127,7 @@ class QNNPACKConv2d final : public c10::OperatorKernel {
     float outScale = output.q_scale().toDouble();
     int outZeroPoint = output.q_zero_point().toInt();
 
+    auto start = high_resolution_clock::now();
     // QNNPACK expects both weights and inputs to be uint8
     const qnnp_status createStatus = qnnp_create_convolution2d_nhwc_q8(
             padT, /* padding top */
@@ -154,11 +155,15 @@ class QNNPACKConv2d final : public c10::OperatorKernel {
             activationLimits(outScale, outZeroPoint, Ac).second, /* output max */
             0 /* flags */,
             &qnnpackOperator_);
-
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stop - start);
+    std::string op_name = "qnnpack_conv2d_create" + to_string(in_ch);
+    std::cout << "Caffe2Observer {\"type\": \""<< op_name << "\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << duration.count() << "}" << std::endl;
     TORCH_INTERNAL_ASSERT(createStatus == qnnp_status_success,
         "failed to create QNNPACK Conv2D operator");
     TORCH_INTERNAL_ASSERT(qnnpackOperator_ != nullptr);
 
+    start = high_resolution_clock::now();
     const qnnp_status setupStatus = qnnp_setup_convolution2d_nhwc_q8(
         qnnpackOperator_ /* convolution */,
         N /* batch_size */,
@@ -168,14 +173,23 @@ class QNNPACKConv2d final : public c10::OperatorKernel {
         in_ch /* input pixel stride */,
         (uint8_t*)output.data_ptr(), /* output data */
         out_ch /* output pixel stride */,
-        qnnpack_threadpool() /* threadpool */);
+        qnnpack_threadpool()  /* threadpool */);
+
+    stop = high_resolution_clock::now();
+    duration = duration_cast<milliseconds>(stop - start);
+    op_name = "qnnpack_conv2d_setup" + to_string(in_ch);
+    std::cout << "Caffe2Observer {\"type\": \""<< op_name << "\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << duration.count() << "}" << std::endl;
 
     TORCH_INTERNAL_ASSERT(
         setupStatus == qnnp_status_success,
         "failed to setup QNNPACK Conv2D operator");
-
+    start = high_resolution_clock::now();
     const qnnp_status runStatus =
         qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
+    stop = high_resolution_clock::now();
+    duration = duration_cast<milliseconds>(stop - start);
+    op_name = "qnnpack_conv2d_run" + to_string(in_ch);
+    std::cout << "Caffe2Observer {\"type\": \""<< op_name << "\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << duration.count() << "}" << std::endl;
 
     TORCH_INTERNAL_ASSERT(
         runStatus == qnnp_status_success, "failed to run QNNPACK Conv operator");

@@ -4,6 +4,7 @@
 
 namespace torch {
 namespace jit {
+extern std::map<std::string, float> time_map;
 
 class InstructionExecutor final {
  public:

@@ -7,6 +7,7 @@ using namespace std::chrono;
 namespace torch {
 namespace jit {
 
+std::map<std::string, float> time_map;
 namespace {
 template <typename dtype> // int64_t, bool, double
 int listConstruct(Stack& stack, int64_t num_inputs) {
@@ -147,10 +148,13 @@ IValue InstructionExecutor::run(Stack& stack) {
       //}
 //      std::cout << "pop reg[" << reg << "];\n" << registers[reg] << "\n";
     }
-    ++pc;
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(stop - start);
-  std::cout << "Time taken for op " << duration.count() << std::endl;
+    std::cout << "Time taken for op " << duration.count() << std::endl;
+    if (inst.name.find("prim") != 0) {
+      time_map[inst.name + std::to_string(pc)] = duration.count();
+    }
+    ++pc;
   }
 
   return stack.front();

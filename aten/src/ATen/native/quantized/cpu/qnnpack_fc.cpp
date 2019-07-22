@@ -9,6 +9,8 @@
 #include "init_qnnpack.h"
 #include "qnnpack_utils.h"
 
+#include <chrono>
+using namespace std::chrono;
 namespace at {
 namespace native {
 namespace {
@@ -32,7 +34,6 @@ class QNNPACKFullyConnected final : public c10::OperatorKernel {
     for (size_t i = 1; i < input_contig.dim(); ++i) {
       cols_a *= input_contig.size(i);
     }
-
     int64_t rows_b = weight.size(0);
 
     TORCH_CHECK(cols_a == weight.size(1),
@@ -54,6 +55,7 @@ class QNNPACKFullyConnected final : public c10::OperatorKernel {
       output_scale,
       output_zero_point);
 
+    auto start = high_resolution_clock::now();
     // QNNPACK expects both weights and inputs to be uint8
     const qnnp_status createStatus = qnnp_create_fully_connected_nc_q8(
         cols_a /* input channels */,
@@ -74,6 +76,12 @@ class QNNPACKFullyConnected final : public c10::OperatorKernel {
     TORCH_INTERNAL_ASSERT(createStatus == qnnp_status_success,
         "failed to create QNNPACK FullyConnected operator");
     TORCH_INTERNAL_ASSERT(qnnpackOperator_ != nullptr);
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stop - start);
+    std::string op_name = "qnnpack_fc_create" + to_string(cols_a);
+    std::cout << "Caffe2Observer {\"type\": \""<< op_name << "\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << duration.count() << "}" << std::endl;
+
+    start = high_resolution_clock::now();
 
     const qnnp_status setupStatus = qnnp_setup_fully_connected_nc_q8(
         qnnpackOperator_ /* convolution */,
@@ -84,8 +92,18 @@ class QNNPACKFullyConnected final : public c10::OperatorKernel {
         rows_b/* output stride */);
     TORCH_INTERNAL_ASSERT(setupStatus == qnnp_status_success,
         "failed to setup QNNPACK fully connected operator");
+    stop = high_resolution_clock::now();
+    duration = duration_cast<milliseconds>(stop - start);
+    op_name = "qnnpack_fc_setup" + to_string(cols_a);
+    std::cout << "Caffe2Observer {\"type\": \""<< op_name << "\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << duration.count() << "}" << std::endl;
+
+    start = high_resolution_clock::now();
     const qnnp_status runStatus =
-        qnnp_run_operator(qnnpackOperator_, qnnpack_threadpool() /* thread pool */);
+        qnnp_run_operator(qnnpackOperator_, nullptr /*qnnpack_threadpool() /* thread pool */);
+     stop = high_resolution_clock::now();
+     duration = duration_cast<milliseconds>(stop - start);
+    op_name = "qnnpack_fc_run" + to_string(cols_a);
+    std::cout << "Caffe2Observer {\"type\": \""<< op_name << "\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << duration.count() << "}" << std::endl;
 
     TORCH_INTERNAL_ASSERT(
         runStatus == qnnp_status_success, "failed to run QNNPACK operator");
