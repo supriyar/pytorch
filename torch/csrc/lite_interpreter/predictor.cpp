@@ -14,7 +14,7 @@ static at::Tensor output;
 static std::shared_ptr<torch::jit::GenericInstructionList> model;
 #define BATCH_SIZE 100
 void allocate_input_buffer(int c, int h, int w) {
-  input = at::zeros({BATCH_SIZE, h, w, c}, at::dtype(at::kFloat));
+  input = at::zeros({BATCH_SIZE, c, h, w}, at::dtype(at::kFloat));
 }
 
 float* input_buffer() {
@@ -46,9 +46,9 @@ int main(int argc, const char* argv[]) {
   std::ifstream input_file(argv[1]);
   load_model(input_file);
   std::cout << (is_model_loaded() ? "OK" : "Failed") << std::endl;
-  allocate_input_buffer(1, 28, 28);
+  allocate_input_buffer(3, 224, 224);
 
-  std::ifstream File;
+  /*std::ifstream File;
   File.open("./mnist_in0.txt");
   std::cout << " Loading input, batch size " << BATCH_SIZE << std::endl;
   std::cout << "Caffe2Observer {\"type\": \"NET\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << 0 << "}" << std::endl;
@@ -65,6 +65,7 @@ int main(int argc, const char* argv[]) {
   input = at::quantize_linear(input, 0.0144, 0, torch::kQUInt8);
   //std::cout << input << std::endl;
   File.close();
+  */
   auto start = high_resolution_clock::now();
   std::cout << "Starting time " << std::endl;
   run_model();
