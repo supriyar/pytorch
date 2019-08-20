@@ -51,8 +51,8 @@ class QNNPACKPrepackLinear final : public torch::OperatorKernel {
                             rows_w /* output_channels */,
                             weight.q_zero_point(),
                             weight.q_scale(),
-                            (uint8_t*)weight_contig.data<c10::quint8>(),
-                            (int32_t*)bias_contig.data<c10::qint32>()),
+                            (uint8_t*)weight_contig.data_ptr<c10::quint8>(),
+                            (int32_t*)bias_contig.data_ptr<c10::qint32>()),
                         weight.q_scale(),
                         weight.q_zero_point()});
 

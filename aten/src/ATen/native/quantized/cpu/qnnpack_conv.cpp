@@ -3,6 +3,7 @@
 #include <ATen/core/op_registration/op_registration.h>
 #include <ATen/cpp_custom_type_hack.h>
 #include <ATen/quantized/Quantizer.h>
+#include <caffe2/utils/threadpool/ThreadPoolMobile.h>
 
 #include "init_qnnpack.h"
 #include "qnnpack_utils.h"
@@ -128,6 +129,7 @@ class QNNPACKConv final : public torch::OperatorKernel {
         output_scale,
         output_zero_point);
 
+    pthreadpool_t threadpool = caffe2::mobile_threadpool();
     const qnnp_status runStatus = qnnpack::qnnpackConv(
         conv_p,
         packB->get_packed_weights(),
@@ -136,11 +138,11 @@ class QNNPACKConv final : public torch::OperatorKernel {
         W,
         input_contig.q_scale(),
         input_contig.q_zero_point(),
-        (uint8_t*)input_contig.data<c10::quint8>(),
+        (uint8_t*)input_contig.data_ptr<c10::quint8>(),
         output.q_scale(),
         output.q_zero_point(),
-        (uint8_t*)output.data<c10::quint8>(),
-        nullptr);
+        (uint8_t*)output.data_ptr<c10::quint8>(),
+        threadpool);
 
     TORCH_INTERNAL_ASSERT(
         runStatus == qnnp_status_success,

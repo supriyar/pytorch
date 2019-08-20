@@ -242,3 +242,157 @@ class Conv2d(torch.nn.Module):
         qconv.scale = float(act_scale)
         qconv.zero_point = int(act_zp)
         return qconv
+
+class QNNPackConv(torch.nn.Module):
+    r"""Performs a 2D convolution on mobile over a quantized input signal
+    composed of several quantized input planes. It implements this using the
+    QNNPACK backend.
+
+    For details on input arguments, parameters, and implementation see
+    :class:`~torch.nn.Conv2d`.
+
+    .. note::
+        bias is a required attribute for this module.
+
+    Attributes:
+        weight (Tensor):     tensor derived from the learnable weight
+                             parameter.
+        scale (Tensor):      scalar for the output scale (float)
+        zero_point (Tensor): scalar for the output zero point (int)
+
+    Examples:
+        >>> conv = nn.quantized.QNNPackConv(in_channels=10, out_channels=32,
+            (2, 2), stride=1, padding=0, dilation=1, groups=1)
+        >>> conv.out_scale = 1.5
+        >>> conv.out_zero_point = 0
+        >>> conv.set_weight_bias(weight, bias)
+        >>> # Run with quantized input
+        >>> output = conv(input)
+
+    """
+    _FLOAT_MODULE = nn.Conv2d
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
+                 padding=0, dilation=1, groups=1):
+        super(QNNPackConv, self).__init__()
+
+        if in_channels % groups != 0:
+            raise ValueError('in_channels must be divisible by groups')
+        if out_channels % groups != 0:
+            raise ValueError('out_channels must be divisible by groups')
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = _pair(stride)
+        self.padding = _pair(padding)
+        self.dilation = _pair(dilation)
+        self.groups = groups
+
+        # Initialize weights as {out_ch, kH, kW, in_ch}
+        qweight = torch._empty_affine_quantized(
+            [out_channels, kernel_size[0], kernel_size[1], in_channels], scale=1, zero_point=0,
+            dtype=torch.quint8)
+        qbias = torch._empty_affine_quantized(
+            [out_channels], scale=1, zero_point=0, dtype=torch.qint32)
+
+        self.set_weight_bias(qweight, qbias)
+        self.out_scale = 1.0
+        self.out_zero_point = 0
+        self.bias = qbias
+
+    def forward(self, x):
+        Y_q = torch.ops.quantized.qnnpack_conv2d_relu(x, self._packed_weight,
+                                        self.bias, self.stride,
+                                        self.padding,
+                                        self.dilation,
+                                        self.groups,
+                                        self.out_scale,
+                                        self.out_zero_point)
+        return Y_q
+
+    @torch.jit.export
+    def __getstate__(self):
+        return (
+            self.in_channels,
+            self.out_channels,
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.dilation,
+            self.groups,
+            self.bias,
+            self._orig_weight,
+            self.out_scale,
+            self.out_zero_point,
+        )
+
+    @torch.jit.export
+    def __setstate__(self, state):
+        # type: (Tuple[int, int, Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int], int, Tensor, Tensor, float, int])  # noqa
+        self.in_channels = state[0]
+        self.out_channels = state[1]
+        self.kernel_size = state[2]
+        self.stride = state[3]
+        self.padding = state[4]
+        self.dilation = state[5]
+        self.groups = state[6]
+        self.bias = state[7]
+        self.set_weight_bias(state[8], state[7])
+        self.out_scale = state[9]
+        self.out_zero_point = state[10]
+
+    def set_weight_bias(self, weight, bias):
+        self._orig_weight = weight
+        self.bias = bias
+        self._packed_weight = torch.ops.quantized.qnnpack_prepack_conv(
+            weight, bias, self.stride, self.padding, self.dilation, self.groups)
+
+    def weight(self):
+        return self._orig_weight
+
+    @classmethod
+    def from_float(cls, mod):
+        r"""Creates a quantized module from a float module or qparams_dict.
+
+        Args:
+            mod (Module): a float module, either produced by torch.quantization
+                          utilities or provided by the user
+        """
+        if hasattr(mod, 'weight_fake_quant'):
+            if type(mod) == nniqat.ConvBn2d:
+                mod.weight, mod.bias = \
+                    fuse_conv_bn_weights(mod.weight, mod.bias, mod.running_mean,
+                                         mod.running_var, mod.eps, mod.gamma, mod.beta)
+            assert hasattr(mod, 'observer'), 'Input QAT module must have observer attached'
+            weight_observer = mod.weight_fake_quant
+            activation_observer = mod.observer
+        else:
+            assert type(mod) == cls._FLOAT_MODULE, ' nnq.' + cls.__name__ + '.from_float only works for ' + \
+                cls._FLOAT_MODULE.__name__
+            assert hasattr(mod, 'qconfig'), 'Input float module must have qconfig defined'
+            # workaround for sequential, ConvReLU2d should probably
+            # inherit from Conv2d instead
+            if type(mod) == nni.ConvReLU2d:
+                activation_observer = mod[1].observer
+                mod = mod[0]
+            else:
+                activation_observer = mod.observer
+            weight_observer = mod.qconfig.weight()
+            weight_observer(mod.weight)
+        act_scale, act_zp = activation_observer.calculate_qparams()
+        wt_scale, wt_zp = weight_observer.calculate_qparams()
+        bias_scale = (wt_scale * act_scale).float()
+        qweight = torch.quantize_linear(
+            mod.weight.float().contiguous(),
+            wt_scale, wt_zp.long().item(), torch.quint8)
+        qconv = cls(mod.in_channels, mod.out_channels, mod.kernel_size,
+                    mod.stride, mod.padding, mod.dilation, mod.groups)
+        if mod.bias is not None:
+            qconv.bias = torch.quantize_linear(mod.bias, bias_scale, 0, torch.qint32)
+        else:
+            # TODO assert here
+            qconv.bias = None
+        qconv.set_weight_bias(qweight, qbias)
+        qconv.scale = float(act_scale)
+        qconv.zero_point = int(act_zp)
+        return qconv

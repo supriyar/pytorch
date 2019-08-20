@@ -6,7 +6,8 @@ from torch._jit_internal import Optional, Tuple
 import torch.nn as nn
 import torch.nn._intrinsic as nni
 from torch.nn.modules import Module
-
+from ...modules.conv import Conv2d as NNConv
+from ...modules.utils import _pair
 
 class Quantize(Module):
     r"""Quantizes an incoming tensor
@@ -230,6 +231,125 @@ class Linear(torch.nn.Module):
             qbias = None
         qlinear = cls(mod.in_features, mod.out_features)
         qlinear.set_weight(qweight)
+        qlinear.bias = qbias
+        qlinear.scale = float(act_scale)
+        qlinear.zero_point = int(act_zp)
+        return qlinear
+
+class QNNPackLinear(torch.nn.Module):
+    r"""
+    A quantized linear module with quantized tensor as inputs
+    and outputs.
+    We adopt the same interface as `torch.nn.Linear`, please see https://pytorch.org/docs/stable/nn.html#torch.nn.Linear
+    for documentation.
+    Similar to `torch.nn.Linear`, attributes will be randomly initialized at
+        module creation time and will be overwritten later
+    Attributes:
+        weight: the non-learnable quantized weights of the
+                module which are of shape :math:`(\text{out\_features}, \text{in\_features})`.
+        bias:   the non-learnable bias of the module of shape :math:`(\text{out\_features})`.
+                If :attr:`bias` is ``True``, the values are initialized to zero.
+        scale: `scale` parameter of output Quantized Tensor, type: float
+        zero_point: `zero_point` parameter for output Quantized Tensor, type: long
+    Examples::
+        >>> m = nn.quantized.QNNPackLinear(20, 30)
+        >>> input = torch.randn(128, 20)
+        >>> output = m(input)
+        >>> print(output.size())
+        torch.Size([128, 30])
+    """
+    _FLOAT_MODULE = nn.Linear
+
+    def __init__(self, in_features, out_features):
+        super(QNNPackLinear, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+
+        qweight = torch._empty_affine_quantized(
+            [out_features, in_features], scale=1, zero_point=0,
+            dtype=torch.quint8)
+        qbias = torch._empty_affine_quantized(
+            [out_features], scale=1, zero_point=0, dtype=torch.qint32)
+
+        #self.register_buffer('out_scale', torch.Tensor([1]))
+        #self.register_buffer('out_zero_point', torch.Tensor([0]))
+        self.out_scale = 1.0
+        self.out_zero_point = 0
+        self.set_weight_bias(qweight, qbias)
+        self.bias = qbias
+
+    def forward(self, x):
+        Y_q = torch.ops.quantized.qnnpack_linear_op(
+            x, self._packed_weight,
+            self.out_scale,
+            self.out_zero_point)
+        return Y_q
+
+    @torch.jit.export
+    def __getstate__(self):
+        return (
+            self.in_features,
+            self.out_features,
+            self.bias,
+            self._orig_weight,
+            self.out_scale,
+            self.out_zero_point
+        )
+
+    @torch.jit.export
+    def __setstate__(self, state):
+        # type: (Tuple[int, int, torch.Tensor, torch.Tensor, float, int]) -> None
+        self.in_features = state[0]
+        self.out_features = state[1]
+        self.bias = state[2]
+        self.set_weight_bias(state[3], state[2])
+        self.out_scale = state[4]
+        self.out_zero_point = state[5]
+
+    def weight(self):
+        return self._orig_weight
+
+    def set_weight_bias(self, weight, bias):
+        self._orig_weight = weight
+        self.bias = bias
+        self._packed_weight = torch.ops.quantized.qnnpack_linear_prepack(weight, bias)
+
+    @classmethod
+    def from_float(cls, mod):
+        r"""Create a quantized module from a float module or qparams_dict
+
+        Args:
+            mod (Module): a float module, either produced by torch.quantization
+                          utilities or provided by the user
+        """
+        if hasattr(mod, 'weight_fake_quant'):
+            weight_observer = mod.weight_fake_quant
+            activation_observer = mod.observer
+        else:
+            assert type(mod) == cls._FLOAT_MODULE, ' nnq.' + cls.__name__ + '.from_float only works for ' + \
+                cls._FLOAT_MODULE.__name__
+            assert hasattr(mod, 'qconfig'), 'Input float module must have qconfig defined'
+            assert hasattr(mod, 'observer'), 'Input float module must have observer attached'
+            # workaround for sequential, ConvReLU2d should probably
+            # inherit from Conv2d instead
+            if type(mod) == nni.LinearReLU:
+                activation_observer = mod[1].observer
+                mod = mod[0]
+            else:
+                activation_observer = mod.observer
+            weight_observer = mod.qconfig.weight()
+            weight_observer(mod.weight)
+        act_scale, act_zp = activation_observer.calculate_qparams()
+        wt_scale, wt_zp = weight_observer.calculate_qparams()
+        bias_scale = (wt_scale * act_scale).float()
+        qweight = torch.quantize_linear(mod.weight.float(), wt_scale, wt_zp.long().item(), torch.quint8)
+        if mod.bias is not None:
+            qbias = torch.quantize_linear(mod.bias.float(), bias_scale, 0, torch.qint32)
+        else:
+            # TODO assert
+            qbias = None
+        qlinear = cls(mod.in_features, mod.out_features)
+        qlinear.set_weight_bias(qweight, qbias)
         qlinear.bias = qbias
         qlinear.scale = float(act_scale)
         qlinear.zero_point = int(act_zp)

@@ -73,8 +73,8 @@ class QNNPACKPrepackConv final : public torch::OperatorKernel {
     auto wt_ptr = guts::make_unique<PackedConvWeights>(
         PackedConvWeights{guts::make_unique<qnnpack::PrePackConvWeights>(
                               conv_p,
-                              (uint8_t*)weight_contig.data<c10::quint8>(),
-                              (int32_t*)bias_contig.data<c10::qint32>()),
+                              (uint8_t*)weight_contig.data_ptr<c10::quint8>(),
+                              (int32_t*)bias_contig.data_ptr<c10::qint32>()),
                           {kernel_h, kernel_w},
                           weight.q_scale(),
                           weight.q_zero_point()});

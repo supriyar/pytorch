@@ -4,9 +4,11 @@ from torch.nn.modules.pooling import MaxPool2d
 
 from .activation import ReLU, ReLU6
 from .conv import Conv2d
+from .conv import QNNPackConv
 from .linear import Linear
 from .linear import Quantize
 from .linear import DeQuantize
+from .linear import QNNPackLinear
 
 from .functional_modules import FloatFunctional, QFunctional
 
@@ -21,4 +23,6 @@ __all__ = [
     # Wrapper modules
     'FloatFunctional',
     'QFunctional',
+    'QNNPackLinear',
+    'QNNPackConv',
 ]
