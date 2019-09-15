@@ -137,13 +137,14 @@ class QLinearPackWeightInt8 final : public c10::OperatorKernel {
 
     int64_t rows_w = weight.size(0);
     int64_t cols_w = weight.size(1);
-    Tensor bias;
+    Tensor bias_fp32;
     if (bias_in.has_value()) {
-      bias = bias_in.value();
+      bias_fp32 = bias_in.value();
     } else {
-      bias = at::zeros(rows_w, at::kFloat);
-      bias = at::quantize_linear(bias, 1.0, 0, kQInt32);
+      bias_fp32 = at::zeros(rows_w, at::kFloat);
     }
+    // FP32 bias. Temporary quantization that will be replaced later
+    auto bias = at::quantize_linear(bias_fp32, 1.0, 0, kQInt32);
     TORCH_CHECK(
         !bias.defined() || (bias.ndimension() == 1 && bias.size(0) == rows_w),
         "quantized::linear_prepack (qnnpack): Given weight of size ",
@@ -157,31 +158,33 @@ class QLinearPackWeightInt8 final : public c10::OperatorKernel {
 
     Tensor weight_contig = weight.contiguous();
     Tensor bias_contig = bias.contiguous();
-    auto w_zp = weight.q_zero_point();
+    auto w_zp = weight.q_zero_point() + 128;
 
     int8_t* inp_data = (int8_t*)weight_contig.data_ptr<c10::qint8>();
     Tensor qnnp_weight = at::dequantize(weight_contig);
-    qnnp_weight = at::quantize_linear(qnnp_weight, weight.q_scale(), w_zp + 128, kQUInt8);
+    qnnp_weight =
+        at::quantize_linear(qnnp_weight, weight.q_scale(), w_zp, kQUInt8);
     auto* qnnp_w_data = qnnp_weight.data_ptr<c10::quint8>();
     for (int i = 0; i < weight_contig.numel(); ++i) {
       qnnp_w_data[i] = static_cast<c10::quint8>(inp_data[i] + 128);
     }
-    w_zp = w_zp + 128;
     initQNNPACK();
 
-    auto wt_ptr =
-        guts::make_unique<PackedLinearWeightsQnnp>(PackedLinearWeightsQnnp{
-            guts::make_unique<qnnpack::PackBMatrix>(
-                cols_w /* input_channels */,
-                rows_w /* output_channels */,
-                w_zp,
-                weight.q_scale(),
-                (uint8_t*)qnnp_w_data,//(uint8_t*)weight_contig.data_ptr<c10::quint8>(),//
-                (int32_t*)bias_contig.data_ptr<c10::qint32>()),
-            weight_contig,
-            bias_contig,
+    auto wt_ptr = guts::make_unique<
+        PackedLinearWeightsQnnp>(PackedLinearWeightsQnnp{
+        guts::make_unique<qnnpack::PackBMatrix>(
+            cols_w /* input_channels */,
+            rows_w /* output_channels */,
+            w_zp,
             weight.q_scale(),
-            w_zp});
+            (uint8_t*)
+                qnnp_w_data, //(uint8_t*)weight_contig.data_ptr<c10::quint8>(),//
+            (int32_t*)bias_contig.data_ptr<c10::qint32>()),
+        weight_contig, /* int8_t weight */
+        bias_fp32.contiguous(), /* FP32 bias */
+        0, /* input_scale */
+        weight.q_scale(),
+        w_zp});
     return cpp_custom_type_hack::create(std::move(wt_ptr), weight.options());
   }
 #endif

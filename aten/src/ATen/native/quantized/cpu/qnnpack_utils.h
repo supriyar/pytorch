@@ -13,6 +13,7 @@ struct PackedLinearWeightsQnnp {
   std::unique_ptr<qnnpack::PackBMatrix> w;
   at::Tensor orig_weight;
   at::Tensor bias;
+  double input_scale;
   double w_scale;
   int64_t w_zp;
 };

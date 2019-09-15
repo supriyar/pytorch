@@ -1282,8 +1282,6 @@ class TestQNNPackOps(TestCase):
 
         W = torch.from_numpy(_dequantize(
             W_q0, W_scales[0], W_zp)).to(dtype=torch.float)
-        #W_q = torch.quantize_linear(W, scale=W_scales[0], zero_point=(
-        #    W_zp), dtype=torch.quint8)
 
         W_q = torch.quantize_linear(W, scale=W_scales[0], zero_point=(
             W_zp.astype(int).item()), dtype=torch.qint8)
@@ -1291,14 +1289,13 @@ class TestQNNPackOps(TestCase):
             b_q0, X_scale * (W_scales[0].item()), 0)).to(dtype=torch.float)
         b_q = torch.quantize_linear(
             b, scale=X_scale * (W_scales[0].item()), zero_point=0, dtype=torch.qint32)
-
         # Compare X_scale * W_scale * input_channels * X_value_max * W_value_max with
         # Y_scale * 255 (max for uint8).
         Y_scale = 125.1234
         Y_zp = 5
 
         # Weight prepacking operator for quantized Linear
-        W_prepack = qlinear_prepack(W_q, b_q)
+        W_prepack = qlinear_prepack(W_q, b)
 
         # Quantized Linear operator with prepacked weight
         Y_q = qlinear(X_q, W_prepack, Y_scale, Y_zp)
