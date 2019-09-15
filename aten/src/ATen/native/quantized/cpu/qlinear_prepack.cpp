@@ -157,7 +157,16 @@ class QLinearPackWeightInt8 final : public c10::OperatorKernel {
 
     Tensor weight_contig = weight.contiguous();
     Tensor bias_contig = bias.contiguous();
+    auto w_zp = weight.q_zero_point();
 
+    int8_t* inp_data = (int8_t*)weight_contig.data_ptr<c10::qint8>();
+    Tensor qnnp_weight = at::dequantize(weight_contig);
+    qnnp_weight = at::quantize_linear(qnnp_weight, weight.q_scale(), w_zp + 128, kQUInt8);
+    auto* qnnp_w_data = qnnp_weight.data_ptr<c10::quint8>();
+    for (int i = 0; i < weight_contig.numel(); ++i) {
+      qnnp_w_data[i] = static_cast<c10::quint8>(inp_data[i] + 128);
+    }
+    w_zp = w_zp + 128;
     initQNNPACK();
 
     auto wt_ptr =
@@ -165,14 +174,14 @@ class QLinearPackWeightInt8 final : public c10::OperatorKernel {
             guts::make_unique<qnnpack::PackBMatrix>(
                 cols_w /* input_channels */,
                 rows_w /* output_channels */,
-                weight.q_zero_point(),
+                w_zp,
                 weight.q_scale(),
-                (uint8_t*)weight_contig.data_ptr<c10::quint8>(),
+                (uint8_t*)qnnp_w_data,//(uint8_t*)weight_contig.data_ptr<c10::quint8>(),//
                 (int32_t*)bias_contig.data_ptr<c10::qint32>()),
             weight_contig,
             bias_contig,
             weight.q_scale(),
-            weight.q_zero_point()});
+            w_zp});
     return cpp_custom_type_hack::create(std::move(wt_ptr), weight.options());
   }
 #endif
