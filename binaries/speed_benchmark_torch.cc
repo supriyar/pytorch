@@ -23,6 +23,9 @@
 #include "torch/csrc/autograd/grad_mode.h"
 #include "torch/csrc/jit/import.h"
 #include "torch/script.h"
+#include "torch/csrc/autograd/profiler.h"
+#include <chrono>
+using namespace std::chrono;
 
 C10_DEFINE_string(model, "", "The given torch script model to benchmark.");
 C10_DEFINE_string(
@@ -81,11 +84,12 @@ int main(int argc, char** argv) {
       CAFFE_THROW("Unsupported input type: ", input_type_list[i]);
     }
   }
-
+  at::globalContext().setQEngine(at::QEngine::QNNPACK);
   torch::autograd::AutoGradMode guard(false);
-  auto module = torch::jit::load(FLAGS_model);
-
   at::AutoNonVariableTypeMode non_var_type_mode(true);
+  auto module = torch::jit::load(FLAGS_model);
+  torch::autograd::profiler::RecordProfile profile_guard("filename.trace");
+  module.eval();
   if (FLAGS_print_output) {
     std::cout << module.forward(inputs) << std::endl;
   }
@@ -108,11 +112,20 @@ int main(int argc, char** argv) {
       FLAGS_iter,
       ".");
   caffe2::Timer timer;
+  std::vector<float> times;
   auto millis = timer.MilliSeconds();
   for (int i = 0; i < FLAGS_iter; ++i) {
+    auto start = high_resolution_clock::now();
     module.forward(inputs);
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stop - start);
+    times.push_back(duration.count());
   }
   millis = timer.MilliSeconds();
+  for (auto t : times) {
+    std::cout << "Caffe2Observer {\"type\": \"NET\", \"metric\": \"latency\", \"unit\": \"ms_per_iter\", \"value\": " << t << "}" << std::endl;
+
+  }
   std::cout << "Main run finished. Milliseconds per iter: "
             << millis / FLAGS_iter
             << ". Iters per second: " << 1000.0 * FLAGS_iter / millis
